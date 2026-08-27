@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Currency, Profile, TeamMember, Tenant } from '@/types';
+import { Currency, Profile, TeamMember, Tenant, TenantSubscription } from '@/types';
 import { formatCurrency } from '@/lib/formatters';
 import {
   Settings,
@@ -22,10 +22,12 @@ import {
   Eye,
   Check,
   Pencil,
-  Edit3
+  Edit3,
+  Crown
 } from 'lucide-react';
 import { TeamManager } from './TeamManager';
 import { EditProfileModal } from '@/components/modals/EditProfileModal';
+import { SubscriptionPlansCard } from './SubscriptionPlansCard';
 
 interface SettingsManagerProps {
   tenant: Tenant;
@@ -54,7 +56,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   onOpenCleanModal,
   onOpenOnboardingWizard
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'network' | 'team' | 'appearance'>('team');
+  const [activeSubTab, setActiveSubTab] = useState<'network' | 'team' | 'appearance' | 'subscriptions'>('subscriptions');
   const [businessName, setBusinessName] = useState<string>(tenant.businessName);
   const [tagline, setTagline] = useState<string>(tenant.tagline);
   const [phone, setPhone] = useState<string>(tenant.phone);
@@ -137,7 +139,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       id: `prof_${Date.now()}`,
       tenantId: tenant.id,
       name: newProfileName.trim(),
-      rateLimit: newRateLimit,
+      rateLimit: 'عامة (اختيار المشترك)',
       uptimeLimit: '1d',
       uptimeDisplay: newUptime,
       byteLimit: '2147483648',
@@ -189,6 +191,21 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
     <div className="space-y-6" dir="rtl">
       {/* Sub Tabs Selector */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl">
+        <button
+          onClick={() => setActiveSubTab('subscriptions')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition relative ${
+            activeSubTab === 'subscriptions'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black shadow-md shadow-amber-950/40'
+              : 'text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20'
+          }`}
+        >
+          <Crown className="w-4 h-4" />
+          <span>باقات واشتراكات المنصة</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30">
+            ترقية ⚡
+          </span>
+        </button>
+
         <button
           onClick={() => setActiveSubTab('team')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition ${
@@ -349,10 +366,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               <div>
                 <h2 className="font-bold text-white text-base flex items-center gap-2">
                   <Sliders className="w-5 h-5 text-emerald-400" />
-                  باقات وسرعات الإنترنت (Profiles)
+                  باقات وسعات الإنترنت (Profiles)
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  حدد فئات الكروت، سرعات التنزيل/الرفع، سعر الجملة للبقالات، وسعر البيع النهائي للزبائن.
+                  حدد فئات الكروت، حجم البيانات، والوقت المتاح مع أسعار الجملة والتجزئة. (الكروت عامة وسرعة التصفح يحددها الزبون من صفحة الدخول).
                 </p>
               </div>
 
@@ -372,7 +389,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
                 <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
                   <tr>
                     <th className="py-2.5 px-3">اسم الباقة</th>
-                    <th className="py-2.5 px-3">حد السرعة (Rate Limit)</th>
+                    <th className="py-2.5 px-3">نظام السرعة</th>
                     <th className="py-2.5 px-3">الوقت المتاح</th>
                     <th className="py-2.5 px-3">حجم البيانات</th>
                     <th className="py-2.5 px-3">سعر الجملة للبقالة</th>
@@ -391,8 +408,10 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
                         />
                         <span>{prof.name}</span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-sky-400">
-                        {prof.rateLimit}
+                      <td className="py-2.5 px-3 font-medium">
+                        <span className="px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[11px] font-bold inline-flex items-center gap-1">
+                          ⚡ عامة (يحددها الزبون)
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 font-medium text-slate-300">
                         {prof.uptimeDisplay}
@@ -437,12 +456,17 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
             {/* Add New Profile Form */}
             <form onSubmit={handleAddProfile} className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3 text-xs">
-              <h3 className="font-bold text-white flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-emerald-400" />
-                إضافة فئة باقة جديدة
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-white flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  إضافة فئة باقة جديدة
+                </h3>
+                <span className="text-[11px] text-sky-400 font-bold bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-500/20">
+                  كروت عامة موحدة • السرعة يحددها المشترك عند تسجيل الدخول
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 mb-1">اسم الباقة *</label>
                   <input
@@ -452,17 +476,6 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
                     onChange={e => setNewProfileName(e.target.value)}
                     placeholder="مثال: باقة 1500 (3 جيجا - يومين)"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1">حد السرعة (Download/Upload)</label>
-                  <input
-                    type="text"
-                    value={newRateLimit}
-                    onChange={e => setNewRateLimit(e.target.value)}
-                    placeholder="مثال: 5M/2M"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono focus:outline-none"
                   />
                 </div>
 
@@ -819,6 +832,48 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: Platform Subscriptions for Network Owners */}
+      {activeSubTab === 'subscriptions' && (
+        <div className="space-y-6">
+          <SubscriptionPlansCard
+            tenant={tenant}
+            onSelectPlan={(plan, billing) => {
+              const planNames = {
+                starter: 'الخطة المجانية',
+                pro: 'الخطة الاحترافية',
+                enterprise: 'خطة الشركات والمؤسسات'
+              };
+              const maxCardsMap = {
+                starter: 300,
+                pro: 999999,
+                enterprise: 9999999
+              };
+              const maxDistributorsMap = {
+                starter: 1,
+                pro: 15,
+                enterprise: 9999
+              };
+
+              const updatedSub: TenantSubscription = {
+                plan,
+                planNameArabic: planNames[plan],
+                status: 'active',
+                maxCards: maxCardsMap[plan],
+                maxDistributors: maxDistributorsMap[plan],
+                billingPeriod: billing === 'yearly' ? 'yearly' : 'monthly',
+                expiresAt: new Date(Date.now() + (billing === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString()
+              };
+
+              onUpdateTenant({
+                subscription: updatedSub
+              });
+
+              alert(`تم بنجاح تحديث وتفعيل ${planNames[plan]} بنظام الدفع ${billing === 'yearly' ? 'السنوي' : 'الشهري'}!`);
+            }}
+          />
         </div>
       )}
 

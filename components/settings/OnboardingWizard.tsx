@@ -86,15 +86,20 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
   const copyRouterQuickScript = () => {
     const script = `# ==============================================
-# NetFlow SaaS - Setup Hotspot Server Profile
+# NetFlow SaaS - Setup Hotspot Server Profile & Speed Groups
 # ==============================================
 /ip hotspot profile
 set [find default=yes] login-by=http-chap,http-pap dns-name="${loginDomain}"
 /ip hotspot user profile
+# General profiles with dynamic login speed selection
+add name="default" session-timeout="1d"
+add name="speed-turbo" rate-limit="15M/10M"
+add name="speed-balanced" rate-limit="6M/3M"
+add name="speed-saver" rate-limit="2M/1M"
 ${wizardProfiles
   .map(
     p =>
-      `add name="${p.name.split(' ')[0]}" rate-limit="${p.rateLimit}" session-timeout="${
+      `add name="${p.name.split(' ')[0]}" session-timeout="${
         p.uptimeLimit || '1d'
       }"`
   )
@@ -280,8 +285,8 @@ ${wizardProfiles
                   >
                     <div>
                       <div className="font-bold text-white text-sm">{prof.name}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">
-                        السرعة: {prof.rateLimit} • الوقت: {prof.uptimeDisplay}
+                      <div className="text-[11px] text-sky-400 font-medium">
+                        كروت عامة • الوقت: {prof.uptimeDisplay} • الحجم: {prof.byteDisplay}
                       </div>
                     </div>
 

@@ -295,8 +295,8 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
             {selectedProfile && (
               <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2 py-0.5 bg-sky-500/15 text-sky-300 font-mono rounded-md text-[11px]">
-                    السرعة: {selectedProfile.rateLimit}
+                  <span className="px-2 py-0.5 bg-sky-500/15 text-sky-300 font-medium rounded-md text-[11px] flex items-center gap-1">
+                    ⚡ كروت عامة (السرعة بصفحة الدخول)
                   </span>
                   <span className="px-2 py-0.5 bg-emerald-500/15 text-emerald-300 font-medium rounded-md text-[11px]">
                     الحجم: {selectedProfile.byteDisplay}

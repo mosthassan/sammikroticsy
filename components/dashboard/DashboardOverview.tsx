@@ -28,7 +28,9 @@ import {
   Clock,
   ShieldCheck,
   Zap,
-  Users
+  Users,
+  Crown,
+  ArrowRight
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -55,6 +57,7 @@ interface DashboardOverviewProps {
   onNavigate: (tab: string) => void;
   onOpenNewInvoiceModal: () => void;
   onOpenNewPaymentModal: () => void;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -67,7 +70,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   payments,
   onNavigate,
   onOpenNewInvoiceModal,
-  onOpenNewPaymentModal
+  onOpenNewPaymentModal,
+  onOpenSubscriptionModal
 }) => {
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -163,6 +167,45 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             سند قبض مالي
           </button>
         </div>
+      </div>
+
+      {/* Network Owner Plan Status & Upgrade Quick Bar */}
+      <div className="p-4 bg-gradient-to-r from-slate-900 via-slate-900/90 to-amber-950/40 border border-slate-800 hover:border-amber-500/40 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 transition">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+            <Crown className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400">اشتراك منصة NetFlow SaaS:</span>
+              <span className="text-xs font-black text-amber-400">
+                {tenant.subscription?.planNameArabic || 'الخطة المجانية (Starter)'}
+              </span>
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded-full border border-emerald-500/30 font-bold">
+                نشط ومفعل
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              الخطة الاحترافية ($10/شهر أو $50/سنة) وخطة المؤسسات ($20/شهر أو $100/سنة) تمنحك راوترات وموزعين وكروت غير محدودة.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenSubscriptionModal) {
+              onOpenSubscriptionModal();
+            } else {
+              onNavigate('settings');
+            }
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs shadow-md shadow-amber-950/40 transition shrink-0 transform active:scale-95"
+        >
+          <Zap className="w-4 h-4 fill-current" />
+          <span>ترقية وتفاصيل الباقات</span>
+          <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+        </button>
       </div>
 
       {/* KPI Cards Grid */}

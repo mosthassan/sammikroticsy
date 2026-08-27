@@ -142,7 +142,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       id: profile ? profile.id : `prof_${Date.now()}`,
       tenantId: tenant.id,
       name: name.trim(),
-      rateLimit: rateLimit.trim() || '5M/2M',
+      rateLimit: 'عامة (اختيار المشترك)',
       uptimeDisplay: uptimeDisplay.trim() || '24 ساعة',
       uptimeLimit: uptimeLimit.trim() || '1d',
       byteDisplay: byteDisplay.trim() || '1 جيجابايت',
@@ -306,39 +306,20 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </div>
           </div>
 
-          {/* MikroTik Network Limits (Speed, Uptime, Bytes) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Speed Limit */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
-                <Zap className="w-3.5 h-3.5 text-sky-400" />
-                <span>السرعة (Download/Upload)</span>
-              </label>
-              <input
-                type="text"
-                value={rateLimit}
-                onChange={e => setRateLimit(e.target.value)}
-                placeholder="5M/2M"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500"
-              />
-              <div className="flex flex-wrap gap-1 pt-1">
-                {SPEED_PRESETS.slice(0, 4).map(p => (
-                  <button
-                    key={p.val}
-                    type="button"
-                    onClick={() => setRateLimit(p.val)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded border transition ${
-                      rateLimit === p.val
-                        ? 'bg-sky-600 text-white border-sky-500'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+          {/* MikroTik Network Limits (Speed dynamic note, Uptime, Bytes) */}
+          <div className="p-3 bg-sky-950/40 border border-sky-500/30 rounded-xl flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4" />
             </div>
+            <div>
+              <h4 className="text-xs font-bold text-sky-300">الكروت عامة وسرعة التصفح ديناميكية</h4>
+              <p className="text-[11px] text-slate-300">
+                لا يتم تقييد السرعة مسبقاً على الكرت، بل يقوم المشترك باختيار سرعته المفضلة (فائق السرعة / متوازن / موفر بيانات) مباشرة من صفحة تسجيل الدخول (Hotspot Portal).
+              </p>
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Uptime Limit */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">

@@ -26,7 +26,9 @@ import {
   Shield,
   ShieldCheck,
   Smartphone,
-  LogOut
+  LogOut,
+  Crown,
+  Zap
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -42,6 +44,7 @@ interface NavigationProps {
   onOpenNewInvoiceModal: () => void;
   onOpenNewPaymentModal: () => void;
   onOpenAuthModal: () => void;
+  onOpenSubscriptionModal?: () => void;
   onLogout: () => void;
 }
 
@@ -58,6 +61,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenNewInvoiceModal,
   onOpenNewPaymentModal,
   onOpenAuthModal,
+  onOpenSubscriptionModal,
   onLogout
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -217,6 +221,24 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                 <span>ديون السوق: {formatCurrency(totalMarketDebt, tenant.currency)}</span>
               </div>
+            )}
+
+            {/* Subscription Plan Badge for Owners */}
+            {isOwner && onOpenSubscriptionModal && (
+              <button
+                type="button"
+                onClick={onOpenSubscriptionModal}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-sm bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/25"
+                title="عرض باقات واشتراكات المنصة أو ترقية الحساب"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">
+                  {tenant.subscription?.planNameArabic || 'الخطة المجانية'}
+                </span>
+                <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-md text-[10px] font-black">
+                  ترقية ⚡
+                </span>
+              </button>
             )}
 
             {/* Quick Action Button: New Delivery */}

@@ -438,7 +438,7 @@ export const DistributorFieldView: React.FC<DistributorFieldViewProps> = ({
                 <div key={prof.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-white text-sm">{prof.name}</span>
-                    <span className="font-mono text-xs text-sky-400">{prof.rateLimit}</span>
+                    <span className="text-[11px] text-sky-400 font-bold bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">كروت عامة</span>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800">

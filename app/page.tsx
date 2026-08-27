@@ -47,6 +47,7 @@ import { DistributorFieldView } from '@/components/distributor/DistributorFieldV
 import { SuperAdminDashboard } from '@/components/admin/SuperAdminDashboard';
 import { OnboardingWizard } from '@/components/settings/OnboardingWizard';
 import { CleanTenantDataModal } from '@/components/settings/CleanTenantDataModal';
+import { SubscriptionPlansModal } from '@/components/modals/SubscriptionPlansModal';
 import { fetchAllTenants, signOutUser } from '@/lib/firestore-service';
 import { Sparkles, Trash2, ShieldCheck, AlertTriangle } from 'lucide-react';
 
@@ -64,6 +65,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState<boolean>(false);
   const [isCleanModalOpen, setIsCleanModalOpen] = useState<boolean>(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState<boolean>(false);
   const [selectedAgentIdForModal, setSelectedAgentIdForModal] = useState<string | undefined>(undefined);
 
   // Super Admin & Multi-Tenant Registry State
@@ -613,6 +615,7 @@ export default function Home() {
           setIsPaymentModalOpen(true);
         }}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
         onLogout={handleLogout}
       />
 
@@ -700,6 +703,7 @@ export default function Home() {
               setSelectedAgentIdForModal(undefined);
               setIsPaymentModalOpen(true);
             }}
+            onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
           />
         )}
 
@@ -863,6 +867,42 @@ export default function Home() {
         profiles={appState.profiles}
         onUpdateTenant={handleUpdateTenant}
         onUpdateProfiles={handleUpdateProfiles}
+      />
+
+      {/* Network Owners Subscription Plans Modal */}
+      <SubscriptionPlansModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        tenant={appState.tenant}
+        onSelectPlan={(plan, billing) => {
+          const planNames = {
+            starter: 'الخطة المجانية',
+            pro: 'الخطة الاحترافية',
+            enterprise: 'خطة الشركات والمؤسسات'
+          };
+          const maxCardsMap = {
+            starter: 300,
+            pro: 999999,
+            enterprise: 9999999
+          };
+          const maxDistributorsMap = {
+            starter: 1,
+            pro: 15,
+            enterprise: 9999
+          };
+
+          handleUpdateTenant({
+            subscription: {
+              plan,
+              planNameArabic: planNames[plan],
+              status: 'active',
+              maxCards: maxCardsMap[plan],
+              maxDistributors: maxDistributorsMap[plan],
+              billingPeriod: billing === 'yearly' ? 'yearly' : 'monthly',
+              expiresAt: new Date(Date.now() + (billing === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString()
+            }
+          });
+        }}
       />
     </div>
   );

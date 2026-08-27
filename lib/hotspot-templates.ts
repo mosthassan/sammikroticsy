@@ -244,6 +244,45 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
       background: #020617;
     }
     
+    .speed-selector {
+      margin: 16px 0;
+      text-align: right;
+    }
+    .speed-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .speed-options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .speed-btn {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1.5px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      padding: 8px 4px;
+      color: var(--text);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      font-size: 10px;
+    }
+    .speed-btn.active {
+      border-color: var(--primary);
+      background: rgba(14, 165, 233, 0.15);
+      box-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+      color: #38bdf8;
+      font-weight: 800;
+    }
+    .speed-btn span.icon { display: block; font-size: 14px; margin-bottom: 2px; }
+    .speed-btn span.title { font-size: 10.5px; font-weight: 700; display: block; }
+    
     .btn-login {
       width: 100%;
       background: linear-gradient(135deg, var(--primary), var(--secondary));
@@ -343,6 +382,28 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
         />
       </div>
 
+      <div class="speed-selector">
+        <div class="speed-label">
+          <span>اختر سرعة التصفح:</span>
+          <span id="selected-speed-badge" style="color: var(--primary); font-size: 10px;">⚡ متوازن (6Mbps)</span>
+        </div>
+        <div class="speed-options">
+          <div class="speed-btn" onclick="selectSpeed('turbo', '🚀 تيربو ألعاب (15Mbps)', this)">
+            <span class="icon">🚀</span>
+            <span class="title">ألعاب وفيديو</span>
+          </div>
+          <div class="speed-btn active" onclick="selectSpeed('balanced', '⚡ متوازن (6Mbps)', this)">
+            <span class="icon">⚡</span>
+            <span class="title">تصفح متوازن</span>
+          </div>
+          <div class="speed-btn" onclick="selectSpeed('saver', '🔋 موفر (2Mbps)', this)">
+            <span class="icon">🔋</span>
+            <span class="title">توفير رصيد</span>
+          </div>
+        </div>
+        <input type="hidden" name="speed_mode" id="speed_mode" value="balanced" />
+      </div>
+
       <input type="hidden" name="password" id="password" />
 
       <button type="submit" class="btn-login">
@@ -374,6 +435,17 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
 
   <script type="text/javascript" src="js/md5.js"></script>
   <script type="text/javascript">
+    function selectSpeed(mode, label, el) {
+      var btns = document.querySelectorAll('.speed-btn');
+      btns.forEach(function(b) { b.classList.remove('active'); });
+      if (el) el.classList.add('active');
+      var badge = document.getElementById('selected-speed-badge');
+      if (badge) badge.innerText = label;
+      var speedInput = document.getElementById('speed_mode');
+      if (speedInput) speedInput.value = mode;
+      try { localStorage.setItem('netflow_preferred_speed', mode); } catch(e){}
+    }
+
     function doLogin() {
       var user = document.login.username.value.trim();
       document.login.username.value = user;
@@ -685,6 +757,9 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
       outline: none;
     }
     .input-box:focus { border-color: #3b82f6; }
+    .speed-pills { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+    .speed-pill { background: #0f172a; border: 1px solid #475569; border-radius: 8px; padding: 6px 4px; font-size: 10px; cursor: pointer; color: #94a3b8; }
+    .speed-pill.active { border-color: #60a5fa; color: #ffffff; background: rgba(37, 99, 235, 0.3); font-weight: bold; }
     .submit-btn {
       width: 100%;
       background: #2563eb;
@@ -712,10 +787,24 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
       <input type="hidden" name="dst" value="$(link-orig)" />
       <input type="hidden" name="popup" value="true" />
       <input type="text" name="username" class="input-box" placeholder="كود الكرت (PIN)" required />
+      
+      <div class="speed-pills">
+        <div class="speed-pill" onclick="setSpeed(this, 'turbo')">🚀 فائق السرعة</div>
+        <div class="speed-pill active" onclick="setSpeed(this, 'balanced')">⚡ سرعة متوازنة</div>
+        <div class="speed-pill" onclick="setSpeed(this, 'saver')">🔋 توفير رصيد</div>
+      </div>
+      <input type="hidden" name="speed_mode" id="speed_mode_blue" value="balanced" />
       <input type="hidden" name="password" />
       <button type="submit" class="submit-btn" onclick="document.login.password.value=document.login.username.value">دخول فوري</button>
     </form>
   </div>
+  <script>
+    function setSpeed(el, val) {
+      document.querySelectorAll('.speed-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('speed_mode_blue').value = val;
+    }
+  </script>
 </body>
 </html>`,
     htmlStatus: `<!DOCTYPE html>
@@ -867,6 +956,9 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
       outline: none;
     }
     .gold-input:focus { border-color: #eab308; box-shadow: 0 0 10px rgba(234, 179, 8, 0.3); }
+    .gold-speeds { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+    .gold-speed-item { background: #0f0d06; border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 10px; padding: 6px; font-size: 11px; cursor: pointer; color: #a1a1aa; }
+    .gold-speed-item.active { border-color: #eab308; color: #fef08a; background: rgba(234, 179, 8, 0.2); font-weight: bold; }
     .gold-btn {
       width: 100%;
       background: linear-gradient(135deg, #eab308, #ca8a04);
@@ -890,10 +982,24 @@ export const PREBUILT_HOTSPOT_TEMPLATES: HotspotPortalTemplate[] = [
       <input type="hidden" name="dst" value="$(link-orig)" />
       <input type="hidden" name="popup" value="true" />
       <input type="text" name="username" class="gold-input" placeholder="رمز الكرت" required />
+      
+      <div class="gold-speeds">
+        <div class="gold-speed-item" onclick="setGoldSpeed(this, 'turbo')">🚀 تيربو VIP</div>
+        <div class="gold-speed-item active" onclick="setGoldSpeed(this, 'balanced')">⚡ سرعة قياسية</div>
+        <div class="gold-speed-item" onclick="setGoldSpeed(this, 'saver')">🔋 توفير الرصيد</div>
+      </div>
+      <input type="hidden" name="speed_mode" id="speed_mode_gold" value="balanced" />
       <input type="hidden" name="password" />
       <button type="submit" class="gold-btn" onclick="document.login.password.value=document.login.username.value">دخول فوري ⚡</button>
     </form>
   </div>
+  <script>
+    function setGoldSpeed(el, val) {
+      document.querySelectorAll('.gold-speed-item').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('speed_mode_gold').value = val;
+    }
+  </script>
 </body>
 </html>`,
     htmlStatus: `<!DOCTYPE html><html lang="ar" dir="rtl"><head><title>الحالة</title><style>body{background:#141108;color:#fef08a;font-family:sans-serif;text-align:center;padding-top:20vh;}</style></head><body><h2>أهلاً بك - أنت متصل</h2><p>المستخدم: $(username)</p><p>الوقت: $(uptime)</p><form action="$(link-logout)"><button style="margin-top:15px;padding:8px 16px;background:#eab308;color:#000;border:none;border-radius:8px;font-weight:bold;">خروج</button></form></body></html>`,
