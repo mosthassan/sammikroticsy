@@ -1,0 +1,6 @@
+{
+  "name": "سام تك لإدارة الشبكات",
+  "description": "نظام احترافي سحابي متكامل لإدارة شبكات المايكروتك وتوليد وتصميم كروت الإنترنت وطباعتها وتوزيعها على نقاط البيع ومتابعة المبيعات والديون والمزامنة الذكية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

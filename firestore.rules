@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Super Admin check for Master Account
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'mosthassan.ye@gmail.com' ||
+        request.auth.token.email == 'admin@samtech.net'
+      );
+    }
+
+    // Tenant Owner or assigned Member check
+    function isTenantOwner(tenantId) {
+      return isSuperAdmin() || (
+        isAuthenticated() && (
+          request.auth.uid == tenantId ||
+          request.auth.uid == resource.data.ownerUid ||
+          request.auth.token.email == resource.data.ownerEmail
+        )
+      );
+    }
+
+    // Root tenants collection and management
+    match /tenants/{tenantId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() || isAuthenticated() || true;
+      
+      // Team members collection
+      match /team/{memberId} {
+        allow read, write: if true;
+      }
+
+      // Point of Sale agents, Invoices, and Payments
+      match /agents/{agentId} {
+        allow read, write: if true;
+      }
+      match /invoices/{invoiceId} {
+        allow read, write: if true;
+      }
+      match /payments/{paymentId} {
+        allow read, write: if true;
+      }
+
+      // Cards & Batches
+      match /batches/{batchId} {
+        allow read, write: if true;
+      }
+      match /cards/{cardId} {
+        allow read, write: if true;
+      }
+
+      // Profiles, Templates & All subcollections
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
+    }
+    
+    // User profiles collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Global platform metadata & system stats
+    match /platform/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+  }
+}
+
+

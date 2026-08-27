@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-cairo: 'Cairo', system-ui, -apple-system, sans-serif;
+    --font-alexandria: 'Alexandria', system-ui, -apple-system, sans-serif;
+    --font-readex: 'Readex Pro', system-ui, -apple-system, sans-serif;
+    --font-tajawal: 'Tajawal', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background-color: #030712;
+    color: #f8fafc;
+    font-family: var(--font-cairo), 'Cairo', system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Numeric figures for dashboards */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom font utility classes */
+.font-cairo {
+  font-family: var(--font-cairo), 'Cairo', sans-serif !important;
+}
+
+.font-alexandria {
+  font-family: var(--font-alexandria), 'Alexandria', sans-serif !important;
+}
+
+.font-readex {
+  font-family: var(--font-readex), 'Readex Pro', sans-serif !important;
+}
+
+.font-tajawal {
+  font-family: var(--font-tajawal), 'Tajawal', sans-serif !important;
+}
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  header, nav, button, .no-print {
+    display: none !important;
+  }
+
+  #a4-sheet-render-area {
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
+}
