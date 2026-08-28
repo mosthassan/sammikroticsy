@@ -49,7 +49,7 @@ import { OnboardingWizard } from '@/components/settings/OnboardingWizard';
 import { CleanTenantDataModal } from '@/components/settings/CleanTenantDataModal';
 import { SubscriptionPlansModal } from '@/components/modals/SubscriptionPlansModal';
 import { fetchAllTenants, signOutUser } from '@/lib/firestore-service';
-import { Sparkles, Trash2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Sparkles, Trash2, ShieldCheck, AlertTriangle, X } from 'lucide-react';
 
 export default function Home() {
   const appState = useSyncExternalStore(
@@ -66,6 +66,7 @@ export default function Home() {
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState<boolean>(false);
   const [isCleanModalOpen, setIsCleanModalOpen] = useState<boolean>(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState<boolean>(false);
+  const [isBannerMinimized, setIsBannerMinimized] = useState<boolean>(false);
   const [selectedAgentIdForModal, setSelectedAgentIdForModal] = useState<string | undefined>(undefined);
 
   // Super Admin & Multi-Tenant Registry State
@@ -622,8 +623,8 @@ export default function Home() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Production Readiness / Clean Slate Setup Banner for Owner */}
-        {isOwner && !appState.tenant.isProductionReady && activeTab !== 'super_admin' && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/70 border border-amber-500/40 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {isOwner && !appState.tenant.isProductionReady && !isBannerMinimized && activeTab !== 'super_admin' && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border border-amber-500/40 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 relative animate-fadeIn">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0">
                 <AlertTriangle className="w-5 h-5 animate-bounce" />
@@ -636,18 +637,34 @@ export default function Home() {
                   </span>
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  هل تريد مسح البيانات التجريبية وضبط باقات وهوية شبكتك الفعلية للإنتاج الحقيقي؟
+                  هل تريد مسح كافة البيانات التجريبية وبدء شبكتك بسجل نظيف وخالٍ من أي تداخل للإنتاج الفعلي؟
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => setIsOnboardingModalOpen(true)}
+                onClick={() => setIsCleanModalOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-2xl text-xs shadow-lg shadow-amber-950/50 transition transform active:scale-95"
               >
-                <Sparkles className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 text-slate-950" />
                 <span>تهيئة الشبكة للإنتاج الفعلي (مسح البيانات)</span>
+              </button>
+
+              <button
+                onClick={() => setIsOnboardingModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-2xl text-xs font-bold transition border border-amber-500/20"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>معالج الإعداد</span>
+              </button>
+
+              <button
+                onClick={() => setIsBannerMinimized(true)}
+                title="تصغير الشريط وإبقاؤه في زاوية الموقع"
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -852,6 +869,7 @@ export default function Home() {
         tenant={appState.tenant}
         onDataPurged={() => {
           appStore.cleanTenantData();
+          handleUpdateTenant({ isProductionReady: true });
         }}
         onStartOnboarding={() => {
           setIsCleanModalOpen(false);
@@ -904,6 +922,42 @@ export default function Home() {
           });
         }}
       />
+
+      {/* Unobtrusive Floating Production Ready / Reset Badge in Corner */}
+      {isOwner && activeTab !== 'super_admin' && (
+        <aside aria-label="أزرار تهيئة الشبكة السريعة" className="fixed bottom-5 left-5 z-40 flex items-center gap-2 print:hidden">
+          {!appState.tenant.isProductionReady ? (
+            <button
+              onClick={() => setIsCleanModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-2xl text-xs shadow-2xl shadow-amber-950/80 border border-amber-300/40 transition transform hover:scale-105 active:scale-95"
+              title="تهيئة وتصفير بيانات الشبكة للإنتاج الفعلي"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>تهيئة الشبكة للإنتاج الفعلي</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 p-1 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl backdrop-blur-md">
+              <button
+                onClick={() => setIsCleanModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-rose-300 hover:text-rose-200 font-bold rounded-xl text-[11px] transition"
+                title="إعادة تصفير وتهيئة السجلات"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">تصفير السجلات</span>
+              </button>
+
+              <button
+                onClick={() => setIsOnboardingModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 font-bold rounded-xl text-[11px] border border-emerald-500/30 transition"
+                title="الشبكة في وضع الإنتاج الفعلي - معالج الإعدادات"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">بيئة الإنتاج الفعلي</span>
+              </button>
+            </div>
+          )}
+        </aside>
+      )}
     </div>
   );
 }

@@ -20,8 +20,10 @@ import { DEFAULT_TEMPLATES } from './templates';
 import {
   ensureAuth,
   fetchTenant,
+  subscribeTenant,
   saveTenant,
   fetchProfiles,
+  subscribeProfiles,
   saveProfiles,
   fetchBatches,
   subscribeBatches,
@@ -37,6 +39,7 @@ import {
   subscribeTeamMembers,
   fetchUserProfile,
   loadTemplatesFromFirestore,
+  subscribeTemplates,
   seedInitialDataIfEmpty,
   DEFAULT_ADMIN_EMAIL
 } from './firestore-service';
@@ -624,14 +627,14 @@ export const appStore = {
    * Initializes real-time two-way Firestore synchronization with optimistic local fallback
    */
   async initFirestoreSync(tenantId: string = 'tenant_main_01'): Promise<() => void> {
-    if (typeof window === 'undefined' || isSyncing) {
+    if (typeof window === 'undefined') {
       return () => {};
     }
 
-    isSyncing = true;
-    
-    // Clear any previous listeners
-    activeUnsubscribers.forEach(unsub => unsub());
+    // Clear any previous listeners before switching/starting
+    activeUnsubscribers.forEach(unsub => {
+      try { unsub(); } catch { /* ignore */ }
+    });
     activeUnsubscribers = [];
 
     try {
@@ -642,65 +645,121 @@ export const appStore = {
       const currentSnap = appStore.getSnapshot();
       await seedInitialDataIfEmpty(tenantId, currentSnap);
 
-      // Fetch tenant & profiles
-      const cloudTenant = await fetchTenant(tenantId);
-      const cloudProfiles = await fetchProfiles(tenantId);
-      const cloudTemplates = await loadTemplatesFromFirestore(tenantId);
+      // 3. Fetch tenant, profiles, templates, and entities
+      const [
+        cloudTenant,
+        cloudProfiles,
+        cloudTemplates,
+        cloudBatches,
+        cloudCards,
+        cloudAgents,
+        cloudInvoices,
+        cloudPayments,
+        cloudTeam
+      ] = await Promise.all([
+        fetchTenant(tenantId),
+        fetchProfiles(tenantId),
+        loadTemplatesFromFirestore(tenantId),
+        fetchBatches(tenantId),
+        fetchCards(tenantId),
+        fetchAgents(tenantId),
+        fetchInvoices(tenantId),
+        fetchPayments(tenantId),
+        fetchTeamMembers(tenantId)
+      ]);
 
       appStore.update(prev => ({
         ...prev,
         tenant: cloudTenant || prev.tenant,
-        profiles: cloudProfiles.length > 0 ? cloudProfiles : prev.profiles,
-        templates: cloudTemplates.length > 0 
+        profiles: (cloudProfiles && cloudProfiles.length > 0) ? cloudProfiles : prev.profiles,
+        templates: (cloudTemplates && cloudTemplates.length > 0)
           ? [...cloudTemplates, ...DEFAULT_TEMPLATES.filter(dt => !cloudTemplates.some(ct => ct.id === dt.id))]
           : prev.templates,
+        batches: cloudBatches || prev.batches,
+        cards: cloudCards || prev.cards,
+        agents: cloudAgents || prev.agents,
+        invoices: cloudInvoices || prev.invoices,
+        payments: cloudPayments || prev.payments,
+        team: cloudTeam || prev.team,
         isCloudConnected: true,
         isSyncingWithCloud: false
       }));
 
-      // 3. Attach Real-time Listeners
+      // 4. Attach Real-time Listeners
+      const unsubTenant = subscribeTenant(tenantId, (tenant) => {
+        if (tenant) {
+          appStore.update(prev => ({ ...prev, tenant }));
+        }
+      });
+
+      const unsubProfiles = subscribeProfiles(tenantId, (profiles) => {
+        if (profiles && profiles.length > 0) {
+          appStore.update(prev => ({ ...prev, profiles }));
+        }
+      });
+
+      const unsubTemplates = subscribeTemplates(tenantId, (templates) => {
+        if (templates && templates.length > 0) {
+          appStore.update(prev => ({
+            ...prev,
+            templates: [...templates, ...DEFAULT_TEMPLATES.filter(dt => !templates.some(ct => ct.id === dt.id))]
+          }));
+        }
+      });
+
       const unsubBatches = subscribeBatches(tenantId, (batches) => {
-        if (batches && batches.length > 0) {
+        if (batches) {
           appStore.update(prev => ({ ...prev, batches }));
         }
       });
 
       const unsubCards = subscribeCards(tenantId, (cards) => {
-        if (cards && cards.length > 0) {
+        if (cards) {
           appStore.update(prev => ({ ...prev, cards }));
         }
       });
 
       const unsubAgents = subscribeAgents(tenantId, (agents) => {
-        if (agents && agents.length > 0) {
+        if (agents) {
           appStore.update(prev => ({ ...prev, agents }));
         }
       });
 
       const unsubInvoices = subscribeInvoices(tenantId, (invoices) => {
-        if (invoices && invoices.length > 0) {
+        if (invoices) {
           appStore.update(prev => ({ ...prev, invoices }));
         }
       });
 
       const unsubPayments = subscribePayments(tenantId, (payments) => {
-        if (payments && payments.length > 0) {
+        if (payments) {
           appStore.update(prev => ({ ...prev, payments }));
         }
       });
 
       const unsubTeam = subscribeTeamMembers(tenantId, (team) => {
-        if (team && team.length > 0) {
+        if (team) {
           appStore.update(prev => ({ ...prev, team }));
         }
       });
 
-      activeUnsubscribers = [unsubBatches, unsubCards, unsubAgents, unsubInvoices, unsubPayments, unsubTeam];
+      activeUnsubscribers = [
+        unsubTenant,
+        unsubProfiles,
+        unsubTemplates,
+        unsubBatches,
+        unsubCards,
+        unsubAgents,
+        unsubInvoices,
+        unsubPayments,
+        unsubTeam
+      ];
 
       return () => {
-        activeUnsubscribers.forEach(unsub => unsub());
+        activeUnsubscribers.forEach(unsub => {
+          try { unsub(); } catch { /* ignore */ }
+        });
         activeUnsubscribers = [];
-        isSyncing = false;
       };
     } catch (err) {
       console.warn('Firestore real-time sync note (working in offline resilient mode):', err);

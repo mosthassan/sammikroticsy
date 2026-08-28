@@ -265,6 +265,28 @@ export async function fetchTenant(tenantId: string): Promise<Tenant | null> {
   }
 }
 
+export function subscribeTenant(
+  tenantId: string,
+  onData: (tenant: Tenant | null) => void,
+  onError?: (err: any) => void
+): Unsubscribe {
+  const docRef = doc(db, 'tenants', tenantId);
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        onData(snap.data() as Tenant);
+      } else {
+        onData(null);
+      }
+    },
+    (err) => {
+      console.warn('subscribeTenant listener note:', err?.message || err);
+      onError?.(err);
+    }
+  );
+}
+
 export async function saveTenant(tenantId: string, tenant: Tenant): Promise<boolean> {
   try {
     await ensureAuth();
@@ -315,6 +337,26 @@ export async function fetchProfiles(tenantId: string): Promise<Profile[]> {
     console.warn('Firestore fetchProfiles note:', error?.message || error);
     return [];
   }
+}
+
+export function subscribeProfiles(
+  tenantId: string,
+  onData: (profiles: Profile[]) => void,
+  onError?: (err: any) => void
+): Unsubscribe {
+  const colRef = collection(db, 'tenants', tenantId, 'profiles');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const profiles: Profile[] = [];
+      snap.forEach((d) => profiles.push(d.data() as Profile));
+      onData(profiles);
+    },
+    (err) => {
+      console.warn('subscribeProfiles listener note:', err?.message || err);
+      onError?.(err);
+    }
+  );
 }
 
 export async function saveProfiles(tenantId: string, profiles: Profile[]): Promise<boolean> {
@@ -720,6 +762,29 @@ export async function loadTemplatesFromFirestore(
     console.warn('Firestore load templates warning:', error?.message);
     return [];
   }
+}
+
+export function subscribeTemplates(
+  tenantId: string,
+  onData: (templates: CardTemplate[]) => void,
+  onError?: (err: any) => void
+): Unsubscribe {
+  const templatesColRef = collection(db, 'tenants', tenantId || 'tenant_main_01', 'templates');
+  const q = query(templatesColRef, orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const templates: CardTemplate[] = [];
+      snap.forEach((docSnap) => {
+        templates.push(docSnap.data() as CardTemplate);
+      });
+      onData(templates);
+    },
+    (err) => {
+      console.warn('subscribeTemplates listener note:', err?.message || err);
+      onError?.(err);
+    }
+  );
 }
 
 export async function deleteTemplateFromFirestore(

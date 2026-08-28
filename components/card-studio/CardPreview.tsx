@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Card, CardTemplate, Tenant } from '@/types';
-import { Wifi, Clock, HardDrive, Phone, Sparkles, Hash } from 'lucide-react';
+import { Wifi, Clock, HardDrive, Phone, Sparkles, Hash, Calendar } from 'lucide-react';
 
 interface CardPreviewProps {
   card: Card;
@@ -60,6 +60,31 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   const supportNumber = template.supportPhoneText || tenant.phone || '77xxxxxxx';
   const cutStyle = template.cutLineStyle || (template.showCutLines ? 'dashed' : 'none');
 
+  const formatCardDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const mins = String(d.getMinutes()).padStart(2, '0');
+
+      if (template.createdAtFormat === 'date_time') {
+        return `${year}/${month}/${day} ${hours}:${mins}`;
+      }
+      if (template.createdAtFormat === 'short') {
+        return `${day}/${month}/${String(year).slice(-2)}`;
+      }
+      return `${year}/${month}/${day}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formattedDate = formatCardDate(card.createdAt || (card as any).generatedAt || new Date().toISOString());
+
   return (
     <div
       id={`card-${card.id}`}
@@ -112,6 +137,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {template.showCreatedAt && formattedDate && (
+            <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-white/10 text-sky-200 font-mono flex items-center gap-0.5" title="تأريخ الإنشاء">
+              <Calendar className="w-2 h-2 text-sky-300" />
+              <span>{formattedDate}</span>
+            </span>
+          )}
           {template.showBatchNumber && (
             <span className="text-[8px] px-1.5 py-0.5 rounded bg-white/10 text-slate-300 font-mono">
               {card.batchNumber || 'B-101'}

@@ -287,6 +287,41 @@ export async function generateCardsPdf(
         ctx.restore();
       }
 
+      // Card Creation Date & Batch Info
+      if (template.showCreatedAt) {
+        const rawDate = card.createdAt || (card as any).generatedAt || new Date().toISOString();
+        let formattedDateStr = '';
+        try {
+          const d = new Date(rawDate);
+          if (!isNaN(d.getTime())) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const hours = String(d.getHours()).padStart(2, '0');
+            const mins = String(d.getMinutes()).padStart(2, '0');
+            if (template.createdAtFormat === 'date_time') {
+              formattedDateStr = `${year}/${month}/${day} ${hours}:${mins}`;
+            } else if (template.createdAtFormat === 'short') {
+              formattedDateStr = `${day}/${month}/${String(year).slice(-2)}`;
+            } else {
+              formattedDateStr = `${year}/${month}/${day}`;
+            }
+          }
+        } catch {
+          formattedDateStr = rawDate;
+        }
+
+        if (formattedDateStr) {
+          ctx.save();
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
+          ctx.fillStyle = isDarkCard ? '#7dd3fc' : '#0284c7';
+          ctx.font = `500 ${Math.round(2.0 * dpiScale)}px monospace, ${fontStack}`;
+          ctx.fillText(`تأريخ: ${formattedDateStr}`, innerRight, topY + 6.8 * dpiScale, cardW * 0.45);
+          ctx.restore();
+        }
+      }
+
       // 5. Body Area: QR Code on Left, Voucher Info on Right
       const bodyY = topY + 8.2 * dpiScale;
       const qrSizeMm = template.qrSizeMm || 15;

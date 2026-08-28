@@ -212,6 +212,8 @@ export interface CardTemplate {
   showSerialNumber?: boolean;
   showBatchNumber?: boolean;
   showSupportPhone?: boolean;
+  showCreatedAt?: boolean;
+  createdAtFormat?: 'date_only' | 'date_time' | 'short';
   supportPhoneText?: string;
   scratchText?: string;
   scratchFoilWidthMm?: number;

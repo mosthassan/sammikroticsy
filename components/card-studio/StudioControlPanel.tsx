@@ -30,7 +30,11 @@ import {
   Lightbulb,
   UploadCloud,
   Pencil,
-  Plus
+  Plus,
+  Calendar,
+  Maximize2,
+  Ruler,
+  LayoutGrid
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -834,6 +838,36 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
             </label>
           </div>
 
+          {/* Card Creation Date Field */}
+          <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                <span>تأريخ إنشاء الكرت (Created At)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={currentTemplate.showCreatedAt}
+                onChange={e => handleUpdateTemplate({ showCreatedAt: e.target.checked })}
+                className="accent-sky-500 rounded w-4 h-4"
+              />
+            </label>
+            {currentTemplate.showCreatedAt && (
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <label className="block text-[11px] text-slate-400">صيغة عرض التأريخ</label>
+                <select
+                  value={currentTemplate.createdAtFormat || 'date_only'}
+                  onChange={e => handleUpdateTemplate({ createdAtFormat: e.target.value as any })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100"
+                >
+                  <option value="date_only">تأريخ فقط (مثال: 2026/03/08)</option>
+                  <option value="date_time">تأريخ ووقت كامل (مثال: 2026/03/08 14:30)</option>
+                  <option value="short">تأريخ مختصر (مثال: 08/03/26)</option>
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* Scratch-off Card Options */}
           <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">
             <label className="flex items-center justify-between cursor-pointer">
@@ -903,53 +937,232 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 4: LAYOUT & CUT LINES */}
+      {/* TAB 4: LAYOUT, DIMENSIONS & CUT LINES */}
       {activeTab === 'layout' && (
         <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4 animate-in fade-in duration-150">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-sky-400" />
-              <h2 className="font-bold text-white text-base">تخطيط ورقة الطباعة A4</h2>
+              <h2 className="font-bold text-white text-base">تخطيط ومقاسات كروت ورقة A4</h2>
             </div>
-            <span className="text-xs text-sky-400 font-mono">
+            <span className="text-xs text-sky-400 font-mono font-bold bg-sky-950/60 border border-sky-800 px-2 py-0.5 rounded-lg">
               {(currentTemplate.cardsPerRow || 3) * (currentTemplate.cardsPerCol || 8)} كرت/ورقة
             </span>
           </div>
 
-          {/* Grid Dimensions */}
+          {/* Quick Preset Dimensions */}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <Ruler className="w-3.5 h-3.5 text-sky-400" />
+              <span>نماذج ومقاسات كروت جاهزة</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { name: 'القياسي المعتمد (24 كرت)', width: 63, height: 33, cols: 3, rows: 8, gapX: 1.5, gapY: 1.5 },
+                { name: 'حجم بطاقة الهوية (8 كروت)', width: 85.6, height: 54, cols: 2, rows: 4, gapX: 4, gapY: 4 },
+                { name: 'حجم متوسط بارز (18 كرت)', width: 70, height: 38, cols: 3, rows: 6, gapX: 2, gapY: 2 },
+                { name: 'حجم اقتصادي مدمج (32 كرت)', width: 50, height: 28, cols: 4, rows: 8, gapX: 1, gapY: 1 }
+              ].map((preset, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleUpdateTemplate({
+                    cardWidthMm: preset.width,
+                    cardHeightMm: preset.height,
+                    cardsPerRow: preset.cols,
+                    cardsPerCol: preset.rows,
+                    gridGapXMm: preset.gapX,
+                    gridGapYMm: preset.gapY
+                  })}
+                  className={`p-2.5 rounded-xl border text-right transition ${
+                    currentTemplate.cardWidthMm === preset.width && currentTemplate.cardHeightMm === preset.height
+                      ? 'bg-sky-600/20 border-sky-500 text-sky-200 shadow-sm'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <p className="text-xs font-bold text-slate-200">{preset.name}</p>
+                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                    {preset.width} × {preset.height} مم ({preset.cols * preset.rows} كرت)
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Precise Card Dimensions (Width x Height) */}
+          <div className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>تعديل مقاس الكرت المخصص (بالمليمتر mm)</span>
+              </span>
+              <span className="text-[11px] font-mono text-emerald-400">
+                {currentTemplate.cardWidthMm || 63} × {currentTemplate.cardHeightMm || 33} مم
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  عرض الكرت (Width mm)
+                </label>
+                <input
+                  type="number"
+                  min={30}
+                  max={200}
+                  step={0.5}
+                  value={currentTemplate.cardWidthMm || 63}
+                  onChange={e => handleUpdateTemplate({ cardWidthMm: parseFloat(e.target.value) || 63 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  ارتفاع الكرت (Height mm)
+                </label>
+                <input
+                  type="number"
+                  min={20}
+                  max={200}
+                  step={0.5}
+                  value={currentTemplate.cardHeightMm || 33}
+                  onChange={e => handleUpdateTemplate({ cardHeightMm: parseFloat(e.target.value) || 33 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Grid Columns & Rows */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                عدد الأعمدة (Columns)
+                عدد الأعمدة في الورقة (Columns)
               </label>
               <select
                 value={currentTemplate.cardsPerRow || 3}
                 onChange={e => handleUpdateTemplate({ cardsPerRow: parseInt(e.target.value) || 3 })}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100"
               >
-                <option value={2}>2 أعمدة (كروت عريضة)</option>
-                <option value={3}>3 أعمدة (القياسي 24 كرت)</option>
-                <option value={4}>4 أعمدة (كروت مدمجة)</option>
-                <option value={5}>5 أعمدة (كروت صغيرة)</option>
+                <option value={2}>2 أعمدة</option>
+                <option value={3}>3 أعمدة (الافتراضي)</option>
+                <option value={4}>4 أعمدة</option>
+                <option value={5}>5 أعمدة</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                عدد الصفوف (Rows)
+                عدد الصفوف في الورقة (Rows)
               </label>
               <select
                 value={currentTemplate.cardsPerCol || 8}
                 onChange={e => handleUpdateTemplate({ cardsPerCol: parseInt(e.target.value) || 8 })}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100"
               >
+                <option value={4}>4 صفوف</option>
                 <option value={5}>5 صفوف</option>
                 <option value={6}>6 صفوف</option>
                 <option value={7}>7 صفوف</option>
-                <option value={8}>8 صفوف (القياسي)</option>
+                <option value={8}>8 صفوف (الافتراضي)</option>
                 <option value={9}>9 صفوف</option>
                 <option value={10}>10 صفوف</option>
               </select>
+            </div>
+          </div>
+
+          {/* Spacing & Gaps in Millimeters */}
+          <div className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <LayoutGrid className="w-3.5 h-3.5 text-sky-400" />
+                <span>تعديل مسافات التباعد بين الكروت (Gaps)</span>
+              </span>
+              <span className="text-[11px] font-mono text-sky-400">
+                X: {currentTemplate.gridGapXMm ?? 1.5}mm | Y: {currentTemplate.gridGapYMm ?? 1.5}mm
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  المسافة الأفقية بين الكروت (مم)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={25}
+                  step={0.5}
+                  value={currentTemplate.gridGapXMm !== undefined ? currentTemplate.gridGapXMm : 1.5}
+                  onChange={e => handleUpdateTemplate({ gridGapXMm: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  value={currentTemplate.gridGapXMm !== undefined ? currentTemplate.gridGapXMm : 1.5}
+                  onChange={e => handleUpdateTemplate({ gridGapXMm: parseFloat(e.target.value) || 0 })}
+                  className="w-full accent-sky-500 mt-1.5 cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  المسافة الرأسية بين الكروت (مم)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={25}
+                  step={0.5}
+                  value={currentTemplate.gridGapYMm !== undefined ? currentTemplate.gridGapYMm : 1.5}
+                  onChange={e => handleUpdateTemplate({ gridGapYMm: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  value={currentTemplate.gridGapYMm !== undefined ? currentTemplate.gridGapYMm : 1.5}
+                  onChange={e => handleUpdateTemplate({ gridGapYMm: parseFloat(e.target.value) || 0 })}
+                  className="w-full accent-sky-500 mt-1.5 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Margins */}
+          <div className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 space-y-3">
+            <span className="text-xs font-bold text-slate-200 block">هوامش أطراف الورقة (Page Margins mm)</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">الهامش الجانبي (X mm)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  step={0.5}
+                  value={currentTemplate.marginX !== undefined ? currentTemplate.marginX : 6}
+                  onChange={e => handleUpdateTemplate({ marginX: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">الهامش العلوي والسفلي (Y mm)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  step={0.5}
+                  value={currentTemplate.marginY !== undefined ? currentTemplate.marginY : 8}
+                  onChange={e => handleUpdateTemplate({ marginY: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
+                />
+              </div>
             </div>
           </div>
 
@@ -978,39 +1191,6 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                   {style.name}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Spacing & Gaps in Millimeters */}
-          <div className="grid grid-cols-2 gap-3 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">
-                المسافة الأفقية بين الكروت (مم)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={15}
-                step={0.5}
-                value={currentTemplate.gridGapXMm !== undefined ? currentTemplate.gridGapXMm : 1.5}
-                onChange={e => handleUpdateTemplate({ gridGapXMm: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">
-                المسافة الرأسية بين الكروت (مم)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={15}
-                step={0.5}
-                value={currentTemplate.gridGapYMm !== undefined ? currentTemplate.gridGapYMm : 1.5}
-                onChange={e => handleUpdateTemplate({ gridGapYMm: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
-              />
             </div>
           </div>
 
