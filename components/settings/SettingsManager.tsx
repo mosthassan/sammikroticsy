@@ -25,7 +25,6 @@ import {
   Edit3,
   Crown,
   Cloud,
-  CloudCheck,
   Copy,
   ExternalLink,
   ShieldCheck,
@@ -952,7 +951,7 @@ service cloud.firestore {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50">
-                  <CloudCheck className="w-6 h-6" />
+                  <Cloud className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">

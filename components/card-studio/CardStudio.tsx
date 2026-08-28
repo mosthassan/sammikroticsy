@@ -5,6 +5,7 @@ import { Card, CardBatch, CardTemplate, Profile, Tenant, CodeCharSet } from '@/t
 import { DEFAULT_TEMPLATES, svgToDataUri } from '@/lib/templates';
 import { CardPreview } from './CardPreview';
 import { A4SheetPreview } from './A4SheetPreview';
+import { InteractiveCardCanvas } from './InteractiveCardCanvas';
 import { StudioControlPanel } from './StudioControlPanel';
 import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store';
 import { generateCardsPdf } from '@/lib/pdf-generator';
@@ -14,7 +15,8 @@ import {
   Printer,
   CheckCircle,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Move
 } from 'lucide-react';
 
 interface CardStudioProps {
@@ -224,7 +226,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
 
   // View state
   const [scriptFlavor, setScriptFlavor] = useState<'hotspot_v7' | 'hotspot_v6' | 'userman_v7' | 'userman_v6'>('hotspot_v7');
-  const [previewMode, setPreviewMode] = useState<'single' | 'a4'>('a4');
+  const [previewMode, setPreviewMode] = useState<'a4' | 'single' | 'designer'>('a4');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -524,13 +526,37 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                معاينة كرت مفرد مكبر
+                معاينة كرت مفرد
+              </button>
+              <button
+                type="button"
+                id="preview-designer-btn"
+                onClick={() => setPreviewMode('designer')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  previewMode === 'designer'
+                    ? 'bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md'
+                    : 'text-sky-400 hover:text-sky-300'
+                }`}
+              >
+                <Move className="w-3.5 h-3.5" />
+                <span>استوديو السحب بالماوس 🖱️</span>
               </button>
             </div>
           </div>
 
           {/* Render Area */}
-          {previewMode === 'single' ? (
+          {previewMode === 'designer' ? (
+            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-inner">
+              {activeCards[0] && (
+                <InteractiveCardCanvas
+                  card={activeCards[0]}
+                  template={currentTemplate}
+                  tenant={tenant}
+                  onUpdateTemplate={handleUpdateTemplate}
+                />
+              )}
+            </div>
+          ) : previewMode === 'single' ? (
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[480px] shadow-inner">
               <div className="mb-4 text-center">
                 <span className="text-xs text-slate-400 font-medium">
