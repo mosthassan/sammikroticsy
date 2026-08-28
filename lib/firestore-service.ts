@@ -85,28 +85,32 @@ export async function signInWithGoogle(): Promise<{ success: boolean; profile?: 
     const user = result.user;
 
     const email = user.email || '';
-    const isDefaultAdmin = email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase();
+    const isDefaultAdmin =
+      email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+      email.toLowerCase() === 'admin@samtech.net';
 
     // Check if user profile already exists
     let profile = await fetchUserProfile(user.uid);
     if (!profile) {
+      const assignedTenantId = isDefaultAdmin ? 'tenant_main_01' : `tenant_${user.uid.substring(0, 12)}`;
       profile = {
         uid: user.uid,
         email: email,
         name: user.displayName || (isDefaultAdmin ? 'المهندس مصطفى حسن (Super Admin)' : email.split('@')[0]),
         photoURL: user.photoURL || undefined,
         role: isDefaultAdmin ? 'super_admin' : 'owner',
-        tenantId: 'tenant_main_01',
+        tenantId: assignedTenantId,
         active: true,
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };
       await saveUserProfile(profile);
     } else {
-      // If default admin, always ensure role is super_admin
-      if (isDefaultAdmin && profile.role !== 'super_admin') {
+      // If default admin, always ensure role is super_admin and tenant is tenant_main_01
+      if (isDefaultAdmin) {
         profile.role = 'super_admin';
-        profile.name = 'المهندس مصطفى حسن (Super Admin)';
+        profile.name = profile.name || 'المهندس مصطفى حسن (Super Admin)';
+        if (!profile.tenantId) profile.tenantId = 'tenant_main_01';
       }
       profile.lastLoginAt = new Date().toISOString();
       if (user.photoURL && !profile.photoURL) profile.photoURL = user.photoURL;
@@ -122,7 +126,7 @@ export async function signInWithGoogle(): Promise<{ success: boolean; profile?: 
     if (code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
       return {
         success: false,
-        error: `النطاق الحالي (${currentHost}) غير مصرح به في Firebase Auth. يرجى إضافته في: Firebase Console > Authentication > Settings > Authorized domains > Add Domain (${currentHost}). يمكنك أيضاً استخدام الدخول بالـ PIN أو الدخول التجريبي مؤقتاً.`
+        error: `النطاق الحالي (${currentHost}) غير مضاف في قائمة النطاقات المصرح بها في Firebase Auth. يرجى إضافته في: Firebase Console > Authentication > Settings > Authorized domains > Add Domain (${currentHost}).`
       };
     }
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
@@ -132,6 +136,64 @@ export async function signInWithGoogle(): Promise<{ success: boolean; profile?: 
       };
     }
     return { success: false, error: error?.message || 'فشل تسجيل الدخول عبر Google' };
+  }
+}
+
+export async function testFirestoreConnection(tenantId: string): Promise<{
+  success: boolean;
+  message: string;
+  latencyMs?: number;
+  error?: string;
+  details?: any;
+}> {
+  const start = Date.now();
+  try {
+    await ensureAuth();
+    const testDocRef = doc(db, 'tenants', tenantId || 'tenant_main_01', 'system', 'ping_test');
+    const testPayload = {
+      lastPingAt: new Date().toISOString(),
+      userUid: auth.currentUser?.uid || 'anonymous',
+      userEmail: auth.currentUser?.email || 'anonymous',
+      clientHost: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
+      timestamp: Date.now()
+    };
+    
+    await setDoc(testDocRef, testPayload, { merge: true });
+    const snap = await getDoc(testDocRef);
+    const latency = Date.now() - start;
+
+    if (snap.exists()) {
+      return {
+        success: true,
+        message: `تم الاتصال وقراءة/كتابة البيانات السحابية بنجاح فائقة خلال ${latency} ميلي ثانية!`,
+        latencyMs: latency,
+        details: snap.data()
+      };
+    } else {
+      return {
+        success: false,
+        message: 'تمت محاولة الكتابة ولكن تعذرت قراءة الوثيقة. يرجى مراجعة قواعد الحماية Firestore Rules.',
+        latencyMs: latency
+      };
+    }
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    console.error('Firestore connection test error:', error);
+    const code = error?.code || '';
+    let advice = error?.message || 'فشل الاتصال بقاعدة بيانات فيرباس.';
+    
+    if (code === 'permission-denied' || error?.message?.includes('insufficient permissions')) {
+      advice = 'تم حظر العملية من قبل قواعد حماية Firebase (Permission Denied). يرجى التأكد من نشر قواعد Firestore الصحيحة المرفقة أدناه في Firebase Console.';
+    } else if (code === 'unavailable' || error?.message?.includes('offline')) {
+      advice = 'الخادم السحابي غير متاح مؤقتاً أو لا يوجد اتصال بالإنترنت.';
+    }
+
+    return {
+      success: false,
+      message: advice,
+      latencyMs: latency,
+      error: error?.message || String(error)
+    };
   }
 }
 

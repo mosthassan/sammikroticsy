@@ -48,7 +48,14 @@ import { SuperAdminDashboard } from '@/components/admin/SuperAdminDashboard';
 import { OnboardingWizard } from '@/components/settings/OnboardingWizard';
 import { CleanTenantDataModal } from '@/components/settings/CleanTenantDataModal';
 import { SubscriptionPlansModal } from '@/components/modals/SubscriptionPlansModal';
-import { fetchAllTenants, signOutUser } from '@/lib/firestore-service';
+import {
+  fetchAllTenants,
+  signOutUser,
+  fetchUserProfile,
+  DEFAULT_ADMIN_EMAIL
+} from '@/lib/firestore-service';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Sparkles, Trash2, ShieldCheck, AlertTriangle, X } from 'lucide-react';
 
 export default function Home() {
@@ -88,6 +95,57 @@ export default function Home() {
 
   useEffect(() => {
     loadTenantsForSuperAdmin();
+  }, []);
+
+  // Auto-detect Firebase Auth state on page load across all browsers / tabs
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        try {
+          const email = firebaseUser.email;
+          const isMaster =
+            email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+            email.toLowerCase() === 'admin@samtech.net';
+
+          let profile = await fetchUserProfile(firebaseUser.uid);
+          const targetTenantId = profile?.tenantId || (isMaster ? 'tenant_main_01' : `tenant_${firebaseUser.uid.substring(0, 12)}`);
+
+          if (!profile) {
+            profile = {
+              uid: firebaseUser.uid,
+              email: email,
+              name: firebaseUser.displayName || (isMaster ? 'المهندس مصطفى حسن (Super Admin)' : email.split('@')[0]),
+              photoURL: firebaseUser.photoURL || undefined,
+              role: isMaster ? 'super_admin' : 'owner',
+              tenantId: targetTenantId,
+              active: true,
+              createdAt: new Date().toISOString(),
+              lastLoginAt: new Date().toISOString()
+            };
+            await saveUserProfile(profile);
+          }
+
+          appStore.update(prev => ({
+            ...prev,
+            currentUserProfile: profile,
+            tenant: {
+              ...prev.tenant,
+              id: targetTenantId,
+              ownerEmail: email,
+              ownerName: profile.name || prev.tenant.ownerName,
+              ownerUid: firebaseUser.uid
+            }
+          }));
+
+          // Trigger cloud synchronization for this tenant
+          appStore.initFirestoreSync(targetTenantId);
+        } catch (err) {
+          console.warn('Auth auto-restore note:', err);
+        }
+      }
+    });
+
+    return () => unsubAuth();
   }, []);
 
   // Initialize real-time Firestore synchronization on mount / tenant change
@@ -156,12 +214,25 @@ export default function Home() {
   }, [currentUser, isSuperAdmin, isOwner, activeTab]);
 
   // Authentication and Session handlers
-  const handleSelectUserProfile = (profile: UserProfile) => {
-    appStore.setCurrentUser(profile);
+  const handleSelectUserProfile = async (profile: UserProfile) => {
     const isMaster =
       profile.role === 'super_admin' ||
       profile.email?.toLowerCase() === 'mosthassan.ye@gmail.com' ||
       profile.email?.toLowerCase() === 'admin@samtech.net';
+
+    const targetTenantId = profile.tenantId || (isMaster ? 'tenant_main_01' : `tenant_${profile.uid.substring(0, 12)}`);
+
+    appStore.update(prev => ({
+      ...prev,
+      currentUserProfile: profile,
+      tenant: {
+        ...prev.tenant,
+        id: targetTenantId,
+        ownerEmail: profile.email || prev.tenant.ownerEmail,
+        ownerName: profile.name || prev.tenant.ownerName,
+        ownerUid: profile.uid || prev.tenant.ownerUid
+      }
+    }));
 
     if (isMaster) {
       setActiveTab('super_admin');
@@ -173,6 +244,11 @@ export default function Home() {
 
     saveUserProfile(profile).catch(err => {
       console.warn('Failed to persist user profile:', err);
+    });
+
+    // Pull and sync from cloud for this tenant immediately
+    appStore.initFirestoreSync(targetTenantId).catch(err => {
+      console.warn('Sync on user switch error:', err);
     });
   };
 
