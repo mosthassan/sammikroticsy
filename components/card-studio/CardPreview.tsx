@@ -279,13 +279,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className={`rounded-md px-2.5 py-0.5 font-mono font-bold tracking-wider shadow-inner text-center flex items-center justify-center gap-1 z-10 ${
                 isDark
-                  ? 'bg-slate-900/90 text-sky-300 border border-sky-500/40'
-                  : 'bg-slate-100 text-slate-900 border border-slate-300'
+                  ? 'bg-slate-950/95 text-white border border-sky-400/60 shadow-sky-950/40'
+                  : 'bg-slate-50 text-slate-950 border border-slate-400'
               }`}
             >
               <span>{card.code}</span>
               {template.showScratchGuide && (
-                <span className="text-[7px] text-amber-400 font-sans mr-0.5 flex items-center gap-0.5">
+                <span className="text-[7.5px] text-amber-400 font-sans mr-0.5 flex items-center gap-0.5">
                   <Sparkles className="w-2 h-2" /> (خدش)
                 </span>
               )}
@@ -304,9 +304,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 8.5) * autoScale}px`
               }}
-              className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 flex items-center gap-1 text-amber-300 font-mono z-10"
+              className="px-1.5 py-0.5 rounded bg-black/40 border border-amber-500/30 flex items-center gap-1 text-amber-300 font-mono font-bold z-10"
             >
-              <span className="text-slate-400 font-sans text-[7.5px]">PIN:</span>
+              <span className="text-slate-300 font-sans text-[7.5px]">PIN:</span>
               <span>{card.password}</span>
             </div>
           );
@@ -323,7 +323,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 8) * autoScale}px`
               }}
-              className="flex items-center gap-0.5 text-slate-300 z-10"
+              className={`flex items-center gap-0.5 font-bold z-10 ${isDark ? 'text-white' : 'text-slate-900'}`}
             >
               <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />
               <span>{card.uptimeDisplay}</span>
@@ -342,7 +342,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 8) * autoScale}px`
               }}
-              className="flex items-center gap-0.5 text-slate-300 z-10"
+              className={`flex items-center gap-0.5 font-bold z-10 ${isDark ? 'text-white' : 'text-slate-900'}`}
             >
               <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
               <span>{card.byteDisplay}</span>
@@ -361,7 +361,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 7.5) * autoScale}px`
               }}
-              className="flex items-center gap-0.5 text-amber-300 font-mono z-10"
+              className="flex items-center gap-0.5 text-amber-300 font-bold font-mono z-10"
             >
               <Phone className="w-2 h-2 text-amber-400" />
               <span>{supportNumber}</span>
@@ -380,7 +380,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 7) * autoScale}px`
               }}
-              className="text-slate-400 font-light truncate max-w-[120px] z-10"
+              className={`font-medium truncate max-w-[140px] z-10 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
             >
               {template.customFooter || 'اتصل بالشبكة وسجل الدخول'}
             </div>
@@ -544,8 +544,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 style={{ fontSize: `${Math.round((template.fontSizeCode || 13) * autoScale)}px` }}
                 className={`py-0.5 px-1.5 rounded font-mono font-bold text-center tracking-wider shadow-inner transition-colors flex items-center justify-center gap-1 ${
                   isDark 
-                    ? 'bg-slate-900/90 text-sky-300 border border-sky-500/40' 
-                    : 'bg-slate-100 text-slate-900 border border-slate-300'
+                    ? 'bg-slate-950/95 text-white border border-sky-400/60 shadow-sky-950/40' 
+                    : 'bg-slate-50 text-slate-950 border border-slate-400'
                 }`}
               >
                 <span>{card.code}</span>
@@ -567,10 +567,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
           {template.showPin && card.password && card.password !== card.code && (
             <div 
               style={{ fontSize: `${Math.round(8 * autoScale)}px` }}
-              className="flex items-center justify-between px-1 bg-white/5 rounded border border-white/5"
+              className="flex items-center justify-between px-1 bg-black/40 rounded border border-amber-500/30 font-bold"
             >
-              <span className="text-slate-400 font-normal">PIN:</span>
-              <span className="font-mono font-bold text-amber-400">{card.password}</span>
+              <span className="text-slate-300 font-normal">PIN:</span>
+              <span className="font-mono text-amber-400">{card.password}</span>
             </div>
           )}
         </div>
@@ -579,9 +579,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       {/* Bottom Footer: Limits (Time, Data, Speed) & Instructions */}
       <div 
         style={{ fontSize: `${Math.round(7.5 * autoScale)}px` }}
-        className="relative z-10 flex items-center justify-between border-t border-white/10 pt-0.5 text-slate-300"
+        className={`relative z-10 flex items-center justify-between border-t border-white/10 pt-0.5 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}
       >
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 font-bold">
           {template.showUptime && (
             <div className="flex items-center gap-0.5">
               <Clock className="w-2 h-2 text-sky-400" />
@@ -602,7 +602,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
           )}
         </div>
 
-        <div className="text-slate-400 font-light truncate max-w-[100px]">
+        <div className={`font-medium truncate max-w-[110px] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
           {template.customFooter || 'اتصل بالشبكة وسجل الدخول'}
         </div>
       </div>

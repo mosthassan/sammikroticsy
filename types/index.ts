@@ -1,5 +1,7 @@
 export type Currency = 'YER' | 'SAR' | 'EGP' | 'USD' | 'IQD' | 'OMR' | 'KWD' | 'AED';
 
+export type CleanupRetentionPolicy = 'immediate' | 'after_24h' | 'after_7d';
+
 export interface TenantSettings {
   routerIp: string; // e.g. "10.0.0.1" or "192.168.88.1"
   loginDomain: string; // e.g. "wifi.net" or "hotspot.lan"
@@ -10,6 +12,12 @@ export interface TenantSettings {
   apiPassword?: string;
   hotspotServerName?: string;
   syncToken: string;
+  // Expired Hotspot Users Cleanup & Maintenance
+  autoCleanupExpiredUsers?: boolean;
+  cleanupRetentionPolicy?: CleanupRetentionPolicy;
+  lastCleanupAt?: string;
+  cleanedCardsCount?: number;
+  cleanupExcludeComments?: string;
 }
 
 export interface TenantSubscription {
@@ -344,5 +352,99 @@ export interface HotspotPortalTemplate {
   customCss?: string;
   isAiGenerated?: boolean;
   createdAt?: string;
+}
+
+// -------------------------------------------------------------
+// Super Admin Platform Configuration Types
+// -------------------------------------------------------------
+
+export type PaymentMethodCategory = 
+  | 'bank_transfer' 
+  | 'e_wallet' 
+  | 'online_gateway' 
+  | 'crypto' 
+  | 'cash_remittance';
+
+export interface PlatformPaymentMethod {
+  id: string;
+  name: string; // e.g. "حساب بنك الكريمي", "محفظة جوالي", "PayPal"
+  category: PaymentMethodCategory;
+  accountNumber: string; // رقم الحساب أو الآيبان أو المعرف
+  accountHolderName: string; // اسم صاحب الحساب / المستفيد
+  currency: Currency | 'USD' | 'USDT';
+  transferFeePercent?: number; // رسوم التحويل إن وجدت
+  instructions: string; // تعليمات إرسال إشعار السداد
+  badgeColor?: string;
+  logoUrl?: string;
+  isActive: boolean;
+  isOnlineGateway?: boolean;
+  gatewayApiKey?: string;
+  gatewaySecretKey?: string;
+  gatewayMerchantId?: string;
+  qrCodeImageUrl?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PlatformSubscriptionPlan {
+  id: string; // e.g. "starter", "pro", "enterprise", or custom ID
+  code: 'starter' | 'pro' | 'enterprise' | string;
+  nameArabic: string;
+  nameEnglish: string;
+  tagline: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  currency: Currency | 'USD';
+  discountPercentageYearly: number;
+  maxCards: number;
+  maxDistributors: number;
+  maxRouters: number;
+  trialDays: number;
+  isRecommended?: boolean;
+  badgeText?: string; // e.g. "الأكثر طلباً", "للشركات الكبرى"
+  colorTheme: 'blue' | 'emerald' | 'purple' | 'amber' | 'sky';
+  features: string[];
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PlatformContactSettings {
+  brandName: string;
+  brandTagline: string;
+  whatsappNumber: string;
+  whatsappSupportUrl?: string;
+  phoneCall: string;
+  supportEmail: string;
+  telegramChannel?: string;
+  telegramUser?: string;
+  workingHours: string;
+  officeAddress: string;
+  websiteUrl: string;
+  facebookUrl?: string;
+  noticeBannerText?: string;
+  isNoticeBannerActive?: boolean;
+  updatedAt: string;
+}
+
+export interface PlatformAdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: 'super_admin' | 'finance_admin' | 'support_admin';
+  roleArabic: string;
+  isActive: boolean;
+  addedBy: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface PlatformSettings {
+  paymentMethods: PlatformPaymentMethod[];
+  subscriptionPlans: PlatformSubscriptionPlan[];
+  contact: PlatformContactSettings;
+  admins: PlatformAdminUser[];
+  updatedAt: string;
 }
 

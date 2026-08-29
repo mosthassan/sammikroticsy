@@ -1,77 +1,118 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function to check if user is authenticated
+
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Super Admin check for Master Account
-    function isSuperAdmin() {
+    // 1. المالك الوحيد صاحب الصلاحيات العليا الجذرية (Sole Super Admins)
+    function isPrimarySuperAdmin() {
       return isAuthenticated() && (
         request.auth.token.email == 'mosthassan.ye@gmail.com' ||
-        request.auth.token.email == 'admin@samtech.net'
+        request.auth.token.email == 'mosthassan.ye2@gmail.com'
       );
     }
 
-    // Tenant Owner or assigned Member check
-    function isTenantOwner(tenantId) {
-      return isSuperAdmin() || (
-        isAuthenticated() && (
-          request.auth.uid == tenantId ||
-          request.auth.uid == resource.data.ownerUid ||
-          request.auth.token.email == resource.data.ownerEmail
-        )
+    // 2. التحقق مما إذا كان المستخدم مضافاً كمدير ذو صلاحيات عليا عبر لوحة إدارة المنصة
+    function isAssignedAdmin() {
+      return isAuthenticated() && (
+        isPrimarySuperAdmin() ||
+        exists(/databases/$(database)/documents/platform/admins/users/$(request.auth.uid)) ||
+        (request.auth.token.email != null && exists(/databases/$(database)/documents/platform/admins/emails/$(request.auth.token.email)))
       );
     }
 
-    // Root tenants collection and management
+    // 3. التحقق من عزل البيانات وعضوية صاحب الشبكة أو الفريق المصرح لهم فقط
+    function isTenantAuthorized(tenantId) {
+      return isAuthenticated() && (
+        isAssignedAdmin() ||
+        request.auth.uid == tenantId ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId
+        ) ||
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/team/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/teamMembers/$(request.auth.uid))
+      );
+    }
+
+    // صلاحيات الإدارة العليا الشاملة (Global Super Admin)
+    match /{document=**} {
+      allow read, write: if isPrimarySuperAdmin();
+    }
+
+    // صلاحيات أصحاب الشبكات (Tenants) وإدارة الكروت والديون والوكلاء مع عزل صارم
     match /tenants/{tenantId} {
-      allow read: if true;
-      allow write: if isSuperAdmin() || isAuthenticated() || true;
-      
-      // Team members collection
-      match /team/{memberId} {
-        allow read, write: if true;
-      }
+      allow read: if isTenantAuthorized(tenantId);
+      allow write: if isTenantAuthorized(tenantId);
 
-      // Point of Sale agents, Invoices, and Payments
-      match /agents/{agentId} {
-        allow read, write: if true;
-      }
-      match /invoices/{invoiceId} {
-        allow read, write: if true;
-      }
-      match /payments/{paymentId} {
-        allow read, write: if true;
-      }
-
-      // Cards & Batches
-      match /batches/{batchId} {
-        allow read, write: if true;
-      }
+      // جميع المجموعات الفرعية معزولة بالكامل بنطاق الشبكة فقط
       match /cards/{cardId} {
-        allow read, write: if true;
+        allow read, write: if isTenantAuthorized(tenantId);
       }
 
-      // Profiles, Templates & All subcollections
-      match /{allSubcollections=**} {
-        allow read, write: if true;
+      match /batches/{batchId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /profiles/{profileId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /agents/{agentId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /invoices/{invoiceId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /payments/{paymentId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /templates/{templateId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /team/{memberId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /teamMembers/{memberId} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      match /system/{systemDoc} {
+        allow read, write: if isTenantAuthorized(tenantId);
+      }
+
+      // أي مجموعات فرعية إضافية
+      match /{subcollection=**} {
+        allow read, write: if isTenantAuthorized(tenantId);
       }
     }
-    
-    // User profiles collection
+
+    // صلاحيات ملفات المستخدمين المعزولة (Users)
     match /users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAssignedAdmin());
     }
 
-    // Global platform metadata & system stats
+    // إدارة المسؤولين والمدراء المضافين من لوحة الإدارة (Admins Management)
+    match /platform/admins/{document=**} {
+      allow read: if isAssignedAdmin();
+      allow write: if isPrimarySuperAdmin();
+    }
+
+    // بيانات المنصة العامة
     match /platform/{document=**} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      allow read: if isAuthenticated();
+      allow write: if isAssignedAdmin();
     }
   }
 }
+
 
 

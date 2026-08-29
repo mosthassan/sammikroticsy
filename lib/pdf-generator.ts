@@ -64,14 +64,14 @@ export async function generateCardsPdf(
   const rows = template.cardsPerCol || 8;
   const cardsPerPage = cols * rows;
 
-  // Dynamic automatic scale factor based on cards per sheet
-  const autoScale = cardsPerPage >= 32 ? 0.78 : cardsPerPage >= 28 ? 0.88 : cardsPerPage <= 12 ? 1.25 : 1.0;
+  // Dynamic automatic scale factor based on cards per sheet (optimized for 32 cards: 4x8)
+  const autoScale = cardsPerPage >= 32 ? 0.85 : cardsPerPage >= 28 ? 0.90 : cardsPerPage <= 12 ? 1.25 : 1.0;
 
-  const marginX = (template.marginX || 8) * dpiScale;
-  const marginY = (template.marginY || 8) * dpiScale;
+  const marginX = (template.marginX || (cardsPerPage >= 32 ? 6.5 : 8)) * dpiScale;
+  const marginY = (template.marginY || (cardsPerPage >= 32 ? 7.5 : 8)) * dpiScale;
 
-  const gapX = (template.gridGapXMm || 1.5) * dpiScale;
-  const gapY = (template.gridGapYMm || 1.5) * dpiScale;
+  const gapX = (template.gridGapXMm ?? 1.2) * dpiScale;
+  const gapY = (template.gridGapYMm ?? 1.2) * dpiScale;
 
   const availableWidth = canvasWidth - marginX * 2 - (cols - 1) * gapX;
   const availableHeight = canvasHeight - marginY * 2 - (rows - 1) * gapY;
@@ -85,11 +85,12 @@ export async function generateCardsPdf(
   const qrImageCache = new Map<string, HTMLImageElement>();
   if (template.showQr) {
     for (const card of cards) {
-      if (!qrImageCache.has(card.qrData)) {
+      const qrData = card.qrData || `http://${tenant.settings?.loginDomain || 'wifi.samtech.net'}/login?username=${card.code}&password=${card.password || card.code}`;
+      if (!qrImageCache.has(qrData)) {
         try {
-          const qrDataUrl = await QRCode.toDataURL(card.qrData, {
+          const qrDataUrl = await QRCode.toDataURL(qrData, {
             margin: 1,
-            width: 300,
+            width: 320,
             color: {
               dark: '#000000',
               light: '#ffffff'
@@ -102,7 +103,10 @@ export async function generateCardsPdf(
             img.onload = () => resolve();
             img.onerror = () => resolve();
           });
-          qrImageCache.set(card.qrData, img);
+          qrImageCache.set(qrData, img);
+          if (card.qrData && card.qrData !== qrData) {
+            qrImageCache.set(card.qrData, img);
+          }
         } catch (err) {
           console.error('QR creation error:', err);
         }
@@ -276,8 +280,8 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `700 ${Math.round((p.fontSize || 11) * 0.38 * dpiScale * autoScale)}px ${fontStack}`;
-          ctx.fillText(tenant.businessName, posX, posY + 3 * dpiScale, cardW * 0.55);
+          ctx.font = `800 ${Math.round(Math.max(3.2, (p.fontSize || 11) * 0.38) * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.fillText(tenant.businessName, posX, posY + 3.2 * dpiScale, cardW * 0.55);
           ctx.restore();
         }
 
@@ -285,7 +289,7 @@ export async function generateCardsPdf(
         if (template.showPrice) {
           const p = getCustomPos('price');
           const badgeW = 20 * dpiScale * autoScale;
-          const badgeH = 6 * dpiScale * autoScale;
+          const badgeH = 6.2 * dpiScale * autoScale;
           const posX = cardX + cardW - ((p.x ?? 74) / 100) * cardW - badgeW;
           const posY = cardY + ((p.y ?? 5) / 100) * cardH;
 
@@ -293,7 +297,7 @@ export async function generateCardsPdf(
           ctx.fillStyle = template.badgeBg || '#f59e0b';
           drawRoundedRect(ctx, posX, posY, badgeW, badgeH, 2.5 * dpiScale, true, false);
           ctx.fillStyle = template.badgeTextColor || '#000000';
-          ctx.font = `800 ${Math.round(3.0 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.font = `900 ${Math.round(3.2 * dpiScale * autoScale)}px ${fontStack}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.direction = 'rtl';
@@ -310,16 +314,17 @@ export async function generateCardsPdf(
           ctx.save();
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
-          ctx.fillStyle = isDarkCard ? '#7dd3fc' : '#0284c7';
-          ctx.font = `500 ${Math.round((p.fontSize || 7.5) * 0.35 * dpiScale * autoScale)}px monospace, ${fontStack}`;
+          ctx.fillStyle = isDarkCard ? '#a5f3fc' : '#0284c7';
+          ctx.font = `600 ${Math.round(Math.max(2.1, (p.fontSize || 7.5) * 0.35) * dpiScale * autoScale)}px monospace, ${fontStack}`;
           ctx.fillText(formattedDateStr, posX, posY + 2.5 * dpiScale);
           ctx.restore();
         }
 
         // QR Code
-        if (template.showQr && qrImageCache.has(card.qrData)) {
+        const cardQr = card.qrData || `http://${tenant.settings?.loginDomain || 'wifi.samtech.net'}/login?username=${card.code}&password=${card.password || card.code}`;
+        if (template.showQr && qrImageCache.has(cardQr)) {
           const p = getCustomPos('qr');
-          const qrImg = qrImageCache.get(card.qrData)!;
+          const qrImg = qrImageCache.get(cardQr)!;
           const qrPx = (template.qrSizeMm || 15) * dpiScale * autoScale;
           const posX = cardX + cardW - ((p.x ?? 6) / 100) * cardW - qrPx;
           const posY = cardY + ((p.y ?? 26) / 100) * cardH;
@@ -342,8 +347,8 @@ export async function generateCardsPdf(
           ctx.save();
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
-          ctx.fillStyle = '#38bdf8';
-          ctx.font = `700 ${Math.round((p.fontSize || 10) * 0.36 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.fillStyle = isDarkCard ? '#38bdf8' : '#0284c7';
+          ctx.font = `800 ${Math.round(Math.max(2.6, (p.fontSize || 10) * 0.36) * dpiScale * autoScale)}px ${fontStack}`;
           ctx.fillText(card.profileName, posX, posY + 2.5 * dpiScale, cardW * 0.5);
           ctx.restore();
         }
@@ -355,8 +360,8 @@ export async function generateCardsPdf(
           const posY = cardY + ((p.y ?? 27) / 100) * cardH;
           ctx.save();
           ctx.textAlign = 'left';
-          ctx.fillStyle = isDarkCard ? '#94a3b8' : '#64748b';
-          ctx.font = `500 ${Math.round((p.fontSize || 7.5) * 0.35 * dpiScale * autoScale)}px monospace`;
+          ctx.fillStyle = isDarkCard ? '#cbd5e1' : '#475569';
+          ctx.font = `600 ${Math.round(Math.max(2.1, (p.fontSize || 7.5) * 0.35) * dpiScale * autoScale)}px monospace`;
           ctx.fillText(`SN:${card.id.replace('card_', '')}`, posX, posY + 2.5 * dpiScale);
           ctx.restore();
         }
@@ -365,19 +370,19 @@ export async function generateCardsPdf(
         if (template.showCode) {
           const p = getCustomPos('code');
           const codeW = cardW * 0.52;
-          const codeH = 7 * dpiScale * autoScale;
+          const codeH = 7.5 * dpiScale * autoScale;
           const posX = cardX + cardW - ((p.x ?? 40) / 100) * cardW - codeW;
           const posY = cardY + ((p.y ?? 44) / 100) * cardH;
 
           ctx.save();
-          ctx.fillStyle = isDarkCard ? '#1e293b' : '#f1f5f9';
+          ctx.fillStyle = isDarkCard ? '#090e1f' : '#f8fafc';
           drawRoundedRect(ctx, posX, posY, codeW, codeH, 2.5 * dpiScale, true, false);
           ctx.strokeStyle = isDarkCard ? '#38bdf8' : '#0284c7';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.75;
           drawRoundedRect(ctx, posX, posY, codeW, codeH, 2.5 * dpiScale, false, true);
 
-          ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `800 ${Math.round((p.fontSize || 13) * 0.36 * dpiScale * autoScale)}px 'Courier New', monospace, ${fontStack}`;
+          ctx.fillStyle = isDarkCard ? '#ffffff' : '#020617';
+          ctx.font = `900 ${Math.round(Math.max(3.6, (p.fontSize || 13) * 0.38) * dpiScale * autoScale)}px 'Courier New', monospace, ${fontStack}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(card.code, posX + codeW / 2, posY + codeH / 2);
@@ -396,7 +401,7 @@ export async function generateCardsPdf(
             drawRoundedRect(ctx, posX, posY, codeW, codeH, 2.5 * dpiScale, false, true);
 
             ctx.fillStyle = '#0f172a';
-            ctx.font = `800 ${Math.round(2.1 * dpiScale * autoScale)}px ${fontStack}`;
+            ctx.font = `800 ${Math.round(2.3 * dpiScale * autoScale)}px ${fontStack}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.direction = 'rtl';
@@ -414,12 +419,12 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = '#fbbf24';
-          ctx.font = `600 ${Math.round((p.fontSize || 8.5) * 0.35 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.font = `700 ${Math.round(Math.max(2.3, (p.fontSize || 8.5) * 0.35) * dpiScale * autoScale)}px ${fontStack}`;
           ctx.fillText(`الرمز السري PIN: ${card.password}`, posX, posY + 2.5 * dpiScale);
           ctx.restore();
         }
 
-        // Uptime & Byte Limit
+        // Uptime & Byte Limit (High Contrast White / Black)
         if (template.showUptime || template.showByteLimit) {
           const p = getCustomPos('uptime');
           const posX = cardX + cardW - ((p.x ?? 5) / 100) * cardW;
@@ -427,8 +432,8 @@ export async function generateCardsPdf(
           ctx.save();
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
-          ctx.fillStyle = isDarkCard ? '#94a3b8' : '#475569';
-          ctx.font = `500 ${Math.round((p.fontSize || 8) * 0.34 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
+          ctx.font = `700 ${Math.round(Math.max(2.4, (p.fontSize || 8) * 0.36) * dpiScale * autoScale)}px ${fontStack}`;
           const metaText = `الصلاحية: ${card.uptimeDisplay} | الرصيد: ${card.byteDisplay}`;
           ctx.fillText(metaText, posX, posY + 2 * dpiScale);
           ctx.restore();
@@ -441,26 +446,26 @@ export async function generateCardsPdf(
         ctx.save();
         ctx.direction = 'rtl';
         ctx.textAlign = 'center';
-        ctx.fillStyle = isDarkCard ? '#64748b' : '#94a3b8';
-        ctx.font = `400 ${Math.round(1.8 * dpiScale * autoScale)}px ${fontStack}`;
+        ctx.fillStyle = isDarkCard ? '#f1f5f9' : '#1e293b';
+        ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px ${fontStack}`;
         const phoneText = template.supportPhoneText || tenant.phone;
         const footerText = template.customFooter 
           ? `${template.customFooter} • هاتف: ${phoneText}`
-          : `تسجيل الدخول: ${tenant.settings.loginDomain} • هاتف الدعم: ${phoneText}`;
+          : `تسجيل الدخول: ${tenant.settings?.loginDomain || 'wifi.samtech.net'} • هاتف الدعم: ${phoneText}`;
         ctx.fillText(footerText, footX, footY, cardW - 4 * dpiScale);
         ctx.restore();
 
       } else {
-        // Standard Auto-Layout with Dynamic Scaling for 32/24 cards
-        const topPadding = 2.8 * dpiScale * autoScale;
-        const innerLeft = cardX + 2.8 * dpiScale * autoScale;
-        const innerRight = cardX + cardW - 2.8 * dpiScale * autoScale;
+        // Standard Auto-Layout with Dynamic Scaling for 32/24/18 cards
+        const topPadding = 2.6 * dpiScale * autoScale;
+        const innerLeft = cardX + 2.6 * dpiScale * autoScale;
+        const innerRight = cardX + cardW - 2.6 * dpiScale * autoScale;
         const topY = cardY + topPadding;
 
         // Price Badge (Top Left in RTL)
         if (template.showPrice) {
           const badgeW = 20 * dpiScale * autoScale;
-          const badgeH = 6 * dpiScale * autoScale;
+          const badgeH = 6.2 * dpiScale * autoScale;
           const badgeX = innerLeft;
           const badgeY = topY;
 
@@ -468,7 +473,7 @@ export async function generateCardsPdf(
           ctx.fillStyle = template.badgeBg || '#f59e0b';
           drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 2.5 * dpiScale, true, false);
           ctx.fillStyle = template.badgeTextColor || '#000000';
-          ctx.font = `800 ${Math.round(3.0 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.font = `900 ${Math.round(3.2 * dpiScale * autoScale)}px ${fontStack}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.direction = 'rtl';
@@ -483,10 +488,10 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `700 ${Math.round((template.fontSizeTitle || 11) * 0.36 * dpiScale * autoScale)}px ${fontStack}`;
+          ctx.font = `800 ${Math.round(Math.max(3.2, (template.fontSizeTitle || 11) * 0.38) * dpiScale * autoScale)}px ${fontStack}`;
           const titleX = innerRight;
           const titleY = topY + 3.2 * dpiScale * autoScale;
-          ctx.fillText(tenant.businessName, titleX, titleY, cardW * 0.56);
+          ctx.fillText(tenant.businessName, titleX, titleY, cardW * 0.55);
           ctx.restore();
         }
 
@@ -495,22 +500,24 @@ export async function generateCardsPdf(
           ctx.save();
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
-          ctx.fillStyle = isDarkCard ? '#7dd3fc' : '#0284c7';
-          ctx.font = `500 ${Math.round(1.9 * dpiScale * autoScale)}px monospace, ${fontStack}`;
-          ctx.fillText(`تأريخ: ${formattedDateStr}`, innerRight, topY + 6.2 * dpiScale * autoScale, cardW * 0.45);
+          ctx.fillStyle = isDarkCard ? '#a5f3fc' : '#0284c7';
+          ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px monospace, ${fontStack}`;
+          ctx.fillText(`تأريخ: ${formattedDateStr}`, innerRight, topY + 6.6 * dpiScale * autoScale, cardW * 0.45);
           ctx.restore();
         }
 
         // 5. Body Area: QR Code on Left, Voucher Info on Right
-        const bodyY = topY + 7.5 * dpiScale * autoScale;
+        const bodyY = topY + 8.2 * dpiScale * autoScale;
         const qrSizeMm = (template.qrSizeMm || 15) * autoScale;
         const qrSizePx = qrSizeMm * dpiScale;
         const qrX = innerLeft;
         const qrY = bodyY;
 
+        const cardQr = card.qrData || `http://${tenant.settings?.loginDomain || 'wifi.samtech.net'}/login?username=${card.code}&password=${card.password || card.code}`;
+
         // Draw QR Code if enabled
-        if (template.showQr && qrImageCache.has(card.qrData)) {
-          const qrImg = qrImageCache.get(card.qrData)!;
+        if (template.showQr && qrImageCache.has(cardQr)) {
+          const qrImg = qrImageCache.get(cardQr)!;
           ctx.save();
           ctx.fillStyle = '#ffffff';
           drawRoundedRect(ctx, qrX, qrY, qrSizePx, qrSizePx, 2.5 * dpiScale, true, false);
@@ -532,36 +539,36 @@ export async function generateCardsPdf(
           ctx.save();
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
-          ctx.fillStyle = '#38bdf8';
-          ctx.font = `700 ${Math.round(2.6 * dpiScale * autoScale)}px ${fontStack}`;
-          ctx.fillText(card.profileName, contentRight, currentItemY + 2.2 * dpiScale * autoScale, contentWidth * 0.7);
+          ctx.fillStyle = isDarkCard ? '#38bdf8' : '#0284c7';
+          ctx.font = `800 ${Math.round(Math.max(2.6, 2.8 * autoScale) * dpiScale)}px ${fontStack}`;
+          ctx.fillText(card.profileName, contentRight, currentItemY + 2.4 * dpiScale * autoScale, contentWidth * 0.65);
 
           if (template.showSerialNumber) {
             ctx.textAlign = 'left';
-            ctx.fillStyle = isDarkCard ? '#94a3b8' : '#64748b';
-            ctx.font = `500 ${Math.round(1.9 * dpiScale * autoScale)}px monospace`;
-            ctx.fillText(`SN:${card.id.replace('card_', '')}`, contentLeft, currentItemY + 2.2 * dpiScale * autoScale);
+            ctx.fillStyle = isDarkCard ? '#cbd5e1' : '#475569';
+            ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px monospace`;
+            ctx.fillText(`SN:${card.id.replace('card_', '')}`, contentLeft, currentItemY + 2.4 * dpiScale * autoScale);
           }
           ctx.restore();
-          currentItemY += 4.0 * dpiScale * autoScale;
+          currentItemY += 4.2 * dpiScale * autoScale;
         }
 
-        // Voucher Code Box
+        // Voucher Code Box (Ultra-Crisp Monospace Container)
         if (template.showCode) {
-          const codeBoxH = 7.0 * dpiScale * autoScale;
+          const codeBoxH = 7.4 * dpiScale * autoScale;
           const codeBoxY = currentItemY;
 
           ctx.save();
-          ctx.fillStyle = isDarkCard ? '#1e293b' : '#f1f5f9';
+          ctx.fillStyle = isDarkCard ? '#090e1f' : '#f8fafc';
           drawRoundedRect(ctx, contentLeft, codeBoxY, contentWidth, codeBoxH, 2.5 * dpiScale, true, false);
           
           ctx.strokeStyle = isDarkCard ? '#38bdf8' : '#0284c7';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.75;
           drawRoundedRect(ctx, contentLeft, codeBoxY, contentWidth, codeBoxH, 2.5 * dpiScale, false, true);
 
-          // Code Text
-          ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `800 ${Math.round((template.fontSizeCode || 13) * 0.36 * dpiScale * autoScale)}px 'Courier New', monospace, ${fontStack}`;
+          // Code Text (Pure Bright White on Dark, Jet Black on Light)
+          ctx.fillStyle = isDarkCard ? '#ffffff' : '#020617';
+          ctx.font = `900 ${Math.round(Math.max(3.6, (template.fontSizeCode || 13) * 0.38) * dpiScale * autoScale)}px 'Courier New', monospace, ${fontStack}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(card.code, contentLeft + contentWidth / 2, codeBoxY + codeBoxH / 2);
@@ -582,7 +589,7 @@ export async function generateCardsPdf(
             drawRoundedRect(ctx, contentLeft, codeBoxY, contentWidth, codeBoxH, 2.5 * dpiScale, false, true);
 
             ctx.fillStyle = '#0f172a';
-            ctx.font = `800 ${Math.round(2.1 * dpiScale * autoScale)}px ${fontStack}`;
+            ctx.font = `800 ${Math.round(2.3 * dpiScale * autoScale)}px ${fontStack}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.direction = 'rtl';
@@ -590,7 +597,7 @@ export async function generateCardsPdf(
             ctx.restore();
           }
 
-          currentItemY += codeBoxH + 2.0 * dpiScale * autoScale;
+          currentItemY += codeBoxH + 2.2 * dpiScale * autoScale;
         }
 
         // PIN Code (if separate from code)
@@ -599,33 +606,33 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = '#fbbf24';
-          ctx.font = `600 ${Math.round(2.3 * dpiScale * autoScale)}px ${fontStack}`;
-          ctx.fillText(`الرمز السري PIN: ${card.password}`, contentRight, currentItemY + 1.8 * dpiScale * autoScale, contentWidth);
+          ctx.font = `700 ${Math.round(Math.max(2.3, 2.5 * autoScale) * dpiScale)}px ${fontStack}`;
+          ctx.fillText(`الرمز السري PIN: ${card.password}`, contentRight, currentItemY + 2.0 * dpiScale * autoScale, contentWidth);
           ctx.restore();
-          currentItemY += 3.2 * dpiScale * autoScale;
+          currentItemY += 3.4 * dpiScale * autoScale;
         }
 
-        // Limits: Time & Quota
+        // Limits: Time & Quota (High-Contrast White on Dark / Black on Light)
         ctx.save();
         ctx.direction = 'rtl';
         ctx.textAlign = 'right';
-        ctx.fillStyle = isDarkCard ? '#94a3b8' : '#475569';
-        ctx.font = `500 ${Math.round(2.1 * dpiScale * autoScale)}px ${fontStack}`;
+        ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
+        ctx.font = `700 ${Math.round(Math.max(2.4, 2.6 * autoScale) * dpiScale)}px ${fontStack}`;
         const metaText = `الصلاحية: ${card.uptimeDisplay} | الرصيد: ${card.byteDisplay}`;
-        ctx.fillText(metaText, contentRight, currentItemY + 1.8 * dpiScale * autoScale, contentWidth);
+        ctx.fillText(metaText, contentRight, currentItemY + 2.0 * dpiScale * autoScale, contentWidth);
         ctx.restore();
 
-        // Bottom Bar / Footer info inside card
+        // Bottom Bar / Footer info inside card (High-Contrast Legibility)
         const footerY = cardY + cardH - 2.2 * dpiScale * autoScale;
         ctx.save();
         ctx.direction = 'rtl';
         ctx.textAlign = 'center';
-        ctx.fillStyle = isDarkCard ? '#64748b' : '#94a3b8';
-        ctx.font = `400 ${Math.round(1.8 * dpiScale * autoScale)}px ${fontStack}`;
+        ctx.fillStyle = isDarkCard ? '#f1f5f9' : '#1e293b';
+        ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px ${fontStack}`;
         const phoneText = template.supportPhoneText || tenant.phone;
         const footerText = template.customFooter 
           ? `${template.customFooter} • هاتف: ${phoneText}`
-          : `تسجيل الدخول: ${tenant.settings.loginDomain} • هاتف الدعم: ${phoneText}`;
+          : `تسجيل الدخول: ${tenant.settings?.loginDomain || 'wifi.samtech.net'} • هاتف الدعم: ${phoneText}`;
         ctx.fillText(footerText, cardX + cardW / 2, footerY, cardW - 4 * dpiScale);
         ctx.restore();
       }

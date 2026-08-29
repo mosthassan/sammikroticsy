@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and role in the platform",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "name": { "type": "string", "description": "Full name or network admin name" },
+        "role": { "type": "string", "enum": ["super_admin", "owner", "admin", "distributor", "accountant", "viewer"] },
+        "tenantId": { "type": "string", "description": "Scoped tenant identifier" },
+        "phone": { "type": "string" },
+        "pinCode": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["uid", "role", "tenantId"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Isolated network tenant data entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "phone": { "type": "string" },
+        "currency": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended", "trial"] }
+      },
+      "required": ["id", "businessName", "ownerUid"]
+    },
+    "Card": {
+      "title": "Card",
+      "description": "Hotspot internet voucher card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "password": { "type": "string" },
+        "batchNumber": { "type": "number" },
+        "profileId": { "type": "string" },
+        "profileName": { "type": "string" },
+        "price": { "type": "number" },
+        "status": { "type": "string", "enum": ["in_stock", "with_agent", "sold", "used", "expired"] }
+      },
+      "required": ["id", "code", "batchNumber", "status"]
+    }
+  }
+}

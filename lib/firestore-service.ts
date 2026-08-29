@@ -41,6 +41,16 @@ import {
 
 // Admin / Owner bootstrap constants
 export const DEFAULT_ADMIN_EMAIL = 'mosthassan.ye@gmail.com';
+export const SUPER_ADMIN_EMAILS: string[] = [
+  'mosthassan.ye@gmail.com',
+  'mosthassan.ye2@gmail.com'
+];
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  return SUPER_ADMIN_EMAILS.some(e => e.toLowerCase() === clean);
+}
 
 // Helper to ensure user is authenticated for Firestore rules
 let authInitPromise: Promise<User | null> | null = null;
@@ -86,7 +96,7 @@ export async function signInWithGoogle(): Promise<{ success: boolean; profile?: 
 
     const email = user.email || '';
     const isDefaultAdmin =
-      email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+      isSuperAdminEmail(email) ||
       email.toLowerCase() === 'admin@samtech.net';
 
     // Check if user profile already exists

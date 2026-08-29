@@ -850,6 +850,34 @@ export function generateBatchCards(
   return { batch, cards: generatedCards };
 }
 
+// ==========================================================
+// RouterOS Script Sanitization & Anti-Injection Defense
+// ==========================================================
+export function sanitizeRouterOSValue(val: unknown, maxLen = 64): string {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  // Strip quotes, command chainers (;), variable expansions ($), subshell brackets ([] and {}), backslashes, newlines
+  return str
+    .replace(/["\$\\;\r\n\[\]\{\}`|]/g, '')
+    .trim()
+    .slice(0, maxLen);
+}
+
+export function sanitizeRouterOSIdentifier(val: unknown, fallback = 'default', maxLen = 32): string {
+  if (val === null || val === undefined) return fallback;
+  const str = String(val);
+  const clean = str.replace(/[^a-zA-Z0-9_\-\.]/g, '_').trim().slice(0, maxLen);
+  return clean || fallback;
+}
+
+export function sanitizeRouterOSComment(val: unknown, maxLen = 80): string {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/["\$\\;\r\n\[\]\{\}`|]/g, '_')
+    .trim()
+    .slice(0, maxLen);
+}
+
 // RouterOS Script Generators
 export function generateRouterOSTerminalScript(cards: Card[], profileName: string = ''): string {
   const lines: string[] = [
@@ -858,79 +886,171 @@ export function generateRouterOSTerminalScript(cards: Card[], profileName: strin
     `# Generated At: ${new Date().toLocaleString('ar-EG')}`,
     `# Total Users: ${cards.length}`,
     `# Note: Username = Password or separate PIN supported 100%`,
+    `# Hardened: RouterOS Injection Protected`,
     `# ==========================================================`,
     `/ip hotspot user`
   ];
 
   for (const card of cards) {
-    // If password is present (or same as code), assign it
-    const pwd = card.password !== undefined && card.password !== '' 
-      ? `password="${card.password}"` 
-      : `password="${card.code}"`;
-    const prof = profileName || card.profileName.split(' ')[0] || 'default';
-    const cleanProf = prof.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const comment = `NetFlow_${card.batchNumber}_${card.price}`;
+    const safeCode = sanitizeRouterOSValue(card.code, 40);
+    if (!safeCode) continue;
+
+    const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
+    const safePwd = sanitizeRouterOSValue(rawPwd, 40);
+    const rawProf = profileName || card.profileName.split(' ')[0] || 'default';
+    const cleanProf = sanitizeRouterOSIdentifier(rawProf, 'default');
+    const comment = sanitizeRouterOSComment(`NetFlow_${card.batchNumber}_${card.price}`);
     
     // MikroTik standard /ip hotspot user add name="xxx" password="xxx" profile="xxx" comment="xxx"
-    lines.push(`add name="${card.code}" ${pwd} profile="${cleanProf}" comment="${comment}"`);
+    lines.push(`add name="${safeCode}" password="${safePwd}" profile="${cleanProf}" comment="${comment}"`);
   }
 
   return lines.join('\n');
 }
 
 export function generateUserManagerV6Script(cards: Card[], customer: string = 'admin'): string {
+  const safeCustomer = sanitizeRouterOSIdentifier(customer, 'admin');
   const lines: string[] = [
     `# ==========================================================`,
     `# NetFlow SaaS - MikroTik User Manager v6 Script (/tool user-manager)`,
     `# Generated At: ${new Date().toLocaleString('ar-EG')}`,
     `# Total Users: ${cards.length}`,
+    `# Hardened: RouterOS Injection Protected`,
     `# ==========================================================`,
     `/tool user-manager user`
   ];
 
   for (const card of cards) {
-    const pwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
-    const prof = card.profileName.split(' ')[0] || 'default';
-    const cleanProf = prof.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const comment = `NetFlow_${card.batchNumber}`;
+    const safeCode = sanitizeRouterOSValue(card.code, 40);
+    if (!safeCode) continue;
+
+    const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
+    const safePwd = sanitizeRouterOSValue(rawPwd, 40);
+    const rawProf = card.profileName.split(' ')[0] || 'default';
+    const cleanProf = sanitizeRouterOSIdentifier(rawProf, 'default');
+    const comment = sanitizeRouterOSComment(`NetFlow_${card.batchNumber}`);
     
-    lines.push(`add customer="${customer}" username="${card.code}" password="${pwd}" comment="${comment}"`);
-    lines.push(`create-and-activate-profile numbers="${card.code}" customer="${customer}" profile="${cleanProf}"`);
+    lines.push(`add customer="${safeCustomer}" username="${safeCode}" password="${safePwd}" comment="${comment}"`);
+    lines.push(`create-and-activate-profile numbers="${safeCode}" customer="${safeCustomer}" profile="${cleanProf}"`);
   }
 
   return lines.join('\n');
 }
 
 export function generateUserManagerV7Script(cards: Card[], userGroup: string = 'default'): string {
+  const safeGroup = sanitizeRouterOSIdentifier(userGroup, 'default');
   const lines: string[] = [
     `# ==========================================================`,
     `# NetFlow SaaS - MikroTik User Manager v7 Script (RouterOS v7)`,
     `# Generated At: ${new Date().toLocaleString('ar-EG')}`,
     `# Total Users: ${cards.length}`,
+    `# Hardened: RouterOS Injection Protected`,
     `# ==========================================================`,
     `/user-manager user`
   ];
 
   for (const card of cards) {
-    const pwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
-    const prof = card.profileName.split(' ')[0] || 'default';
-    const cleanProf = prof.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const comment = `NetFlow_${card.batchNumber}`;
+    const safeCode = sanitizeRouterOSValue(card.code, 40);
+    if (!safeCode) continue;
+
+    const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
+    const safePwd = sanitizeRouterOSValue(rawPwd, 40);
+    const rawProf = card.profileName.split(' ')[0] || 'default';
+    const cleanProf = sanitizeRouterOSIdentifier(rawProf, 'default');
+    const comment = sanitizeRouterOSComment(`NetFlow_${card.batchNumber}`);
     
-    lines.push(`add name="${card.code}" password="${pwd}" group="${userGroup}" comment="${comment}"`);
-    lines.push(`/user-manager user-profile add user="${card.code}" profile="${cleanProf}"`);
+    lines.push(`add name="${safeCode}" password="${safePwd}" group="${safeGroup}" comment="${comment}"`);
+    lines.push(`/user-manager user-profile add user="${safeCode}" profile="${cleanProf}"`);
   }
 
   return lines.join('\n');
 }
 
+export function generateRouterOSCleanupScript(
+  retentionPolicy: 'immediate' | 'after_24h' | 'after_7d' = 'immediate',
+  excludeComments: string = 'admin,keep_admin,bypass,vip'
+): string {
+  const policyLabelMap = {
+    immediate: 'حذف فوري بمجرد انتهاء الرصيد أو الوقت (Immediate on Expiry)',
+    after_24h: 'حذف الكروت المنتهية بعد 24 ساعة (Grace 24h)',
+    after_7d: 'حذف الكروت المنتهية بعد 7 أيام (Grace 7 Days)'
+  };
+  const policyLabel = policyLabelMap[retentionPolicy] || policyLabelMap.immediate;
+
+  // Sanitize excludeComments input to prevent regex breakdown or command injection
+  const safeExcludeKeywords = (excludeComments || 'admin,keep_admin,bypass,vip')
+    .split(',')
+    .map(k => sanitizeRouterOSIdentifier(k.trim(), ''))
+    .filter(Boolean);
+
+  const excludeChecks = safeExcludeKeywords.length > 0
+    ? safeExcludeKeywords.map(k => `$uComment ~ "${k}"`).join(' || ')
+    : '$uComment ~ "keep_admin"';
+
+  return `# ==========================================================
+# NetFlow SaaS - Expired Hotspot Users Cleanup & Maintenance
+# Policy: ${policyLabel}
+# Generated At: ${new Date().toISOString()}
+# Safe Routine: Excludes Admin & Protected Accounts (Injection Hardened)
+# ==========================================================
+
+:log info "NetFlow Maintenance: Starting scan for expired hotspot users..."
+/ip hotspot user
+:local totalRemoved 0
+
+:foreach u in=[find] do={
+  :local uName [get $u name]
+  :local uComment ""
+  :do { :set uComment [get $u comment] } on-error={}
+  :local bytesIn [get $u bytes-in]
+  :local bytesOut [get $u bytes-out]
+  :local byteLimit [get $u limit-bytes-total]
+  :local uptime [get $u uptime]
+  :local uptimeLimit [get $u limit-uptime]
+  :local isProtected false
+
+  # Protect admin, default accounts, and explicitly tagged users
+  :if ($uName = "admin" || $uName = "default") do={ :set isProtected true }
+  :if (${excludeChecks}) do={ :set isProtected true }
+
+  :if (!$isProtected) do={
+    :local isExpired false
+
+    # Check byte quota exhaustion (Total downloaded + uploaded >= Limit)
+    :if ($byteLimit > 0 && ($bytesIn + $bytesOut) >= $byteLimit) do={
+      :set isExpired true
+    }
+
+    # Check uptime / validity exhaustion
+    :if ($uptimeLimit > 0s && $uptime >= $uptimeLimit) do={
+      :set isExpired true
+    }
+
+    :if ($isExpired) do={
+      :do {
+        remove $u
+        :set totalRemoved ($totalRemoved + 1)
+      } on-error={
+        :log debug ("NetFlow Maintenance: Skipped user " . $uName)
+      }
+    }
+  }
+}
+
+:log info ("NetFlow Maintenance: Completed. Cleaned up " . $totalRemoved . " expired hotspot users.")
+`;
+}
+
 export function generateRouterOSFetchPollingScript(tenant: Tenant): string {
   const token = tenant.settings.syncToken || 'nf_sec_token';
-  const apiEndpoint = `https://netflow-saas.cloud/api/mikrotik/sync?token=${token}`;
+  const autoCleanup = tenant.settings.autoCleanupExpiredUsers ? '&cleanup=true' : '';
+  const retention = tenant.settings.cleanupRetentionPolicy ? `&retention=${tenant.settings.cleanupRetentionPolicy}` : '';
+  const apiEndpoint = `https://netflow-saas.cloud/api/mikrotik/sync?token=${token}${autoCleanup}${retention}`;
 
   return `# ==========================================================
 # NetFlow SaaS - Auto-Fetch Polling Script for MikroTik RouterOS
 # Run without requiring a Static Public IP!
+# Auto-Cleanup Mode: ${tenant.settings.autoCleanupExpiredUsers ? 'ENABLED (تشغيل الصيانة الدورية)' : 'DISABLED'}
 # Add to: /system script and schedule every 2-5 minutes in /system scheduler
 # ==========================================================
 
