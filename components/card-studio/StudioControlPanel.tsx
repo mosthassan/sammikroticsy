@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Card, CardTemplate, Profile, Tenant, CodeCharSet } from '@/types';
 import { PREBUILT_TEMPLATES_LIBRARY } from '@/lib/templates';
 import { formatCurrency } from '@/lib/formatters';
+import { CARD_GRID_PRESETS, computeCardAutoScale } from '@/lib/utils';
 import { EditProfileModal } from '@/components/modals/EditProfileModal';
 import {
   Zap,
@@ -34,7 +35,10 @@ import {
   Calendar,
   Maximize2,
   Ruler,
-  LayoutGrid
+  LayoutGrid,
+  Tag,
+  Box,
+  Paintbrush
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -934,6 +938,311 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
             />
           </div>
+
+          {/* ADVANCED ELEMENT SHAPES & STYLING CONTROLS */}
+          <div className="border-t border-slate-800 pt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Paintbrush className="w-4 h-4 text-amber-400" />
+                <span>أشكال وتنسيق العناصر داخل الكرت (Element Shapes & Styles)</span>
+              </span>
+              <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                احترافي
+              </span>
+            </div>
+
+            {/* 1. Code Box Shape & Styling */}
+            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Box className="w-3.5 h-3.5 text-sky-400" />
+                  <span>شكل صندوق الكود (Code Box Style)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {currentTemplate.codeBoxStyle || 'modern_box'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { id: 'modern_box', label: 'مستطيل ناعم' },
+                  { id: 'pill_badge', label: 'كبسولة دائرية' },
+                  { id: 'ticket_dashed', label: 'تذكرة منقطة' },
+                  { id: 'neon_glow', label: 'توهج نيون' },
+                  { id: 'minimal_clean', label: 'مسطح نقي' },
+                  { id: 'split_pin', label: 'تقسيم الرمز' }
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleUpdateTemplate({ codeBoxStyle: s.id as any })}
+                    className={`px-2 py-2 rounded-lg border text-center text-[11px] font-medium transition ${
+                      (currentTemplate.codeBoxStyle || 'modern_box') === s.id
+                        ? 'bg-sky-600/30 border-sky-500 text-sky-200 font-bold ring-1 ring-sky-500/40'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Code Box Colors */}
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">خلفية الصندوق</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.codeBoxBg || '#0f172a'}
+                      onChange={e => handleUpdateTemplate({ codeBoxBg: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.codeBoxBg || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">إطار الصندوق</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.codeBoxBorderColor || '#0284c7'}
+                      onChange={e => handleUpdateTemplate({ codeBoxBorderColor: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.codeBoxBorderColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">لون نص الكود</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.codeBoxTextColor || '#ffffff'}
+                      onChange={e => handleUpdateTemplate({ codeBoxTextColor: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.codeBoxTextColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Price Tag Shape & Styling */}
+            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-amber-400" />
+                  <span>شكل شارة السعر (Price Badge Style)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {currentTemplate.priceTagStyle || 'pill'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { id: 'pill', label: 'كبسولة دائرية' },
+                  { id: 'ribbon', label: 'شريط زاوية' },
+                  { id: 'stamp', label: 'ختم رسمي' },
+                  { id: 'glow', label: 'توهج نيون' },
+                  { id: 'minimal', label: 'مسطح ناعم' }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleUpdateTemplate({ priceTagStyle: p.id as any })}
+                    className={`px-2 py-2 rounded-lg border text-center text-[11px] font-medium transition ${
+                      (currentTemplate.priceTagStyle || 'pill') === p.id
+                        ? 'bg-amber-600/30 border-amber-500 text-amber-200 font-bold ring-1 ring-amber-500/40'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Price Tag Colors */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">خلفية شارة السعر</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.badgeBg || '#f59e0b'}
+                      onChange={e => handleUpdateTemplate({ badgeBg: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.badgeBg || '#f59e0b'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">لون رقم السعر</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.badgeTextColor || '#000000'}
+                      onChange={e => handleUpdateTemplate({ badgeTextColor: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.badgeTextColor || '#000000'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. QR Code Frame & Colors */}
+            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>إطار وألوان باركود QR (QR Code Styling)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {currentTemplate.qrFrameStyle || 'card_rounded'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { id: 'card_rounded', label: 'بطاقة ناعمة' },
+                  { id: 'circular', label: 'دائري كامل' },
+                  { id: 'clean_flat', label: 'مسطح نقي' },
+                  { id: 'accent_border', label: 'إطار ملون' }
+                ].map((q) => (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => handleUpdateTemplate({ qrFrameStyle: q.id as any })}
+                    className={`px-2 py-2 rounded-lg border text-center text-[11px] font-medium transition ${
+                      (currentTemplate.qrFrameStyle || 'card_rounded') === q.id
+                        ? 'bg-emerald-600/30 border-emerald-500 text-emerald-200 font-bold ring-1 ring-emerald-500/40'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* QR Colors */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">لون نقاط الباركود (Dark)</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.qrDarkColor || '#000000'}
+                      onChange={e => handleUpdateTemplate({ qrDarkColor: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.qrDarkColor || '#000000'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">لون خلفية الباركود (Light)</label>
+                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.qrLightColor || '#ffffff'}
+                      onChange={e => handleUpdateTemplate({ qrLightColor: e.target.value })}
+                      className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[10px] font-mono text-slate-300 truncate">
+                      {currentTemplate.qrLightColor || '#ffffff'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Text & Typography Colors */}
+            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ألوان نصوص الكرت المخصصة (Typography Colors)</span>
+              </label>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 truncate">اسم الشبكة</label>
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.networkNameColor || '#ffffff'}
+                      onChange={e => handleUpdateTemplate({ networkNameColor: e.target.value })}
+                      className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[9px] font-mono text-slate-300 truncate">
+                      {currentTemplate.networkNameColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 truncate">اسم الباقة</label>
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.profileNameColor || '#38bdf8'}
+                      onChange={e => handleUpdateTemplate({ profileNameColor: e.target.value })}
+                      className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[9px] font-mono text-slate-300 truncate">
+                      {currentTemplate.profileNameColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 truncate">الصلاحية والفوتر</label>
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.metaIconsColor || '#94a3b8'}
+                      onChange={e => handleUpdateTemplate({ metaIconsColor: e.target.value })}
+                      className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[9px] font-mono text-slate-300 truncate">
+                      {currentTemplate.metaIconsColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1 truncate">تأريخ الإنشاء</label>
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg p-1">
+                    <input
+                      type="color"
+                      value={currentTemplate.dateBadgeColor || '#0284c7'}
+                      onChange={e => handleUpdateTemplate({ dateBadgeColor: e.target.value })}
+                      className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="text-[9px] font-mono text-slate-300 truncate">
+                      {currentTemplate.dateBadgeColor || 'تلقائي'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -952,40 +1261,110 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
 
           {/* Quick Preset Dimensions */}
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <Ruler className="w-3.5 h-3.5 text-sky-400" />
-              <span>نماذج ومقاسات كروت جاهزة</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Ruler className="w-3.5 h-3.5 text-sky-400" />
+                <span>نماذج ومقاسات شبكية جاهزة (A4 Presets)</span>
+              </label>
+              <span className="text-[10px] text-slate-400">تكيف تلقائي فوري</span>
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { name: 'القياسي المعتمد (24 كرت)', width: 63, height: 33, cols: 3, rows: 8, gapX: 1.5, gapY: 1.5 },
-                { name: 'حجم بطاقة الهوية (8 كروت)', width: 85.6, height: 54, cols: 2, rows: 4, gapX: 4, gapY: 4 },
-                { name: 'حجم متوسط بارز (18 كرت)', width: 70, height: 38, cols: 3, rows: 6, gapX: 2, gapY: 2 },
-                { name: 'حجم اقتصادي مدمج (32 كرت)', width: 50, height: 28, cols: 4, rows: 8, gapX: 1, gapY: 1 }
-              ].map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleUpdateTemplate({
-                    cardWidthMm: preset.width,
-                    cardHeightMm: preset.height,
-                    cardsPerRow: preset.cols,
-                    cardsPerCol: preset.rows,
-                    gridGapXMm: preset.gapX,
-                    gridGapYMm: preset.gapY
-                  })}
-                  className={`p-2.5 rounded-xl border text-right transition ${
-                    currentTemplate.cardWidthMm === preset.width && currentTemplate.cardHeightMm === preset.height
-                      ? 'bg-sky-600/20 border-sky-500 text-sky-200 shadow-sm'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <p className="text-xs font-bold text-slate-200">{preset.name}</p>
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                    {preset.width} × {preset.height} مم ({preset.cols * preset.rows} كرت)
-                  </p>
-                </button>
-              ))}
+              {CARD_GRID_PRESETS.map((preset, idx) => {
+                const isSelected = 
+                  currentTemplate.cardsPerRow === preset.cols && 
+                  currentTemplate.cardsPerCol === preset.rows;
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleUpdateTemplate({
+                      cardWidthMm: preset.widthMm,
+                      cardHeightMm: preset.heightMm,
+                      cardsPerRow: preset.cols,
+                      cardsPerCol: preset.rows,
+                      gridGapXMm: preset.gapXMm,
+                      gridGapYMm: preset.gapYMm,
+                      marginX: preset.marginX,
+                      marginY: preset.marginY,
+                      elementScale: preset.elementScale || 1.0
+                    })}
+                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-sky-950/70 border-sky-500 text-sky-200 shadow-md ring-1 ring-sky-500/40'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <p className="text-xs font-bold text-slate-100">{preset.name}</p>
+                      {isSelected && (
+                        <span className="w-4 h-4 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black">
+                          ✓
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      {preset.widthMm} × {preset.heightMm} مم ({preset.cardsPerPage} كرت/صفحة)
+                    </p>
+                    <span className="text-[9px] text-sky-400/80 mt-1 truncate">
+                      {preset.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Dynamic Scaling & Flexibility Indicator */}
+          <div className="bg-gradient-to-r from-sky-950/60 to-indigo-950/40 p-3.5 rounded-xl border border-sky-800/60 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-sky-200 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                <span>مرونة تناسق العناصر التلقائي (Auto-Scale)</span>
+              </span>
+              <span className="text-[11px] font-mono text-sky-300 font-bold bg-sky-900/60 px-2 py-0.5 rounded-md border border-sky-700/50">
+                {Math.round(
+                  computeCardAutoScale(
+                    currentTemplate.cardsPerRow || 3,
+                    currentTemplate.cardsPerCol || 8,
+                    currentTemplate.cardWidthMm || 63,
+                    currentTemplate.cardHeightMm || 33,
+                    currentTemplate.elementScale || 1.0
+                  ) * 100
+                )}%
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-300 leading-relaxed">
+              عند التبديل بين 42 كرت أو 32 كرت تتكيف خطوط الباركود وحجم الخطوط وصناديق الأكواد تلقائياً لمنع أي تداخل وضمان وضوح فائق للطباعة.
+            </p>
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-[10px] text-slate-400">
+                <span>تعديل يدوي لحجم وتناسق العناصر:</span>
+                <span className="font-mono text-sky-400 font-bold">
+                  {Math.round((currentTemplate.elementScale || 1.0) * 100)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0.70}
+                  max={1.30}
+                  step={0.05}
+                  value={currentTemplate.elementScale || 1.0}
+                  onChange={e => handleUpdateTemplate({ elementScale: parseFloat(e.target.value) })}
+                  className="flex-1 accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+                {(currentTemplate.elementScale && currentTemplate.elementScale !== 1.0) && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateTemplate({ elementScale: 1.0 })}
+                    className="text-[10px] text-sky-400 hover:text-sky-300 underline px-1 whitespace-nowrap"
+                  >
+                    إعادة ضبط
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

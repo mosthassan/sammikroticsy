@@ -312,7 +312,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="grid grid-cols-1 gap-2.5">
                 {/* Switch to Super Admin */}
                 <button
-                  onClick={() => handleQuickSwitchRole('super_admin', 'المشرف العام (Super Admin)', 'admin@samtech.net')}
+                  onClick={() => handleQuickSwitchRole('super_admin', 'المهندس مصطفى حسن (Super Admin)', 'mosthassan.ye@gmail.com')}
                   className={`p-3.5 rounded-2xl border text-right transition flex items-center justify-between ${
                     currentUser.role === 'super_admin'
                       ? 'bg-purple-950/40 border-purple-500/50 shadow-inner'

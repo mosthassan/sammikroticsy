@@ -95,25 +95,60 @@ export const A4SheetPreview: React.FC<A4SheetPreviewProps> = ({
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl p-1">
               <button
+                type="button"
+                id="first-page-btn"
+                onClick={() => onPageChange(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 bg-slate-800/80 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-300 text-xs transition"
+                title="الصفحة الأولى"
+              >
+                «
+              </button>
+              <button
+                type="button"
                 id="prev-page-btn"
                 onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-200 font-medium transition"
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-200 font-medium text-xs transition"
               >
                 السابق
               </button>
-              <span className="font-mono text-slate-300 text-[11px] px-1">
-                {currentPage} / {totalPages}
-              </span>
+              <div className="flex items-center gap-1 px-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={currentPage}
+                  onChange={e => {
+                    const p = parseInt(e.target.value);
+                    if (!isNaN(p) && p >= 1 && p <= totalPages) {
+                      onPageChange(p);
+                    }
+                  }}
+                  className="w-12 bg-slate-900 border border-slate-750 rounded-lg text-center font-mono text-sky-400 font-bold text-xs py-1 focus:outline-none focus:border-sky-500"
+                />
+                <span className="font-mono text-slate-400 text-xs">/ {totalPages}</span>
+              </div>
               <button
+                type="button"
                 id="next-page-btn"
                 onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-200 font-medium transition"
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-200 font-medium text-xs transition"
               >
                 التالي
+              </button>
+              <button
+                type="button"
+                id="last-page-btn"
+                onClick={() => onPageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 bg-slate-800/80 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-300 text-xs transition"
+                title="الصفحة الأخيرة"
+              >
+                »
               </button>
             </div>
           )}

@@ -197,7 +197,13 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err: any) {
       console.error('AI Template Generation Error:', err);
-      setAiError(err.message || 'حدث خطأ أثناء الاتصال بالذكاء الاصطناعي');
+      let friendlyError = err.message || 'حدث خطأ أثناء توليد القالب بالذكاء الاصطناعي';
+      if (typeof friendlyError === 'string' && friendlyError.includes('GEMINI_API_KEY')) {
+        friendlyError = 'مفتاح GEMINI_API_KEY غير مهيأ في بيئة العمل، يرجى إضافته في إعدادات المنصة';
+      } else if (typeof friendlyError === 'string' && (friendlyError.includes('quota') || friendlyError.includes('RESOURCE_EXHAUSTED'))) {
+        friendlyError = 'تم استنفاد الحصة المؤقتة لمفتاح Gemini، يرجى المحاولة بعد دقيقة أو استخدام نمط جاهز';
+      }
+      setAiError(friendlyError);
     } finally {
       setIsGeneratingAiTemplate(false);
       setAiGenerationStep('');
@@ -229,6 +235,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [previewMode, setPreviewMode] = useState<'a4' | 'single' | 'designer'>('a4');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
 
@@ -266,8 +273,12 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const handleDownloadPdf = async () => {
     if (activeCards.length === 0) return;
     setIsGeneratingPdf(true);
+    const totalPages = Math.ceil(activeCards.length / ((currentTemplate.cardsPerRow || 3) * (currentTemplate.cardsPerCol || 8)));
+    setPdfProgress({ current: 1, total: totalPages });
     try {
-      const blob = await generateCardsPdf(activeCards, currentTemplate, tenant);
+      const blob = await generateCardsPdf(activeCards, currentTemplate, tenant, (current, total) => {
+        setPdfProgress({ current, total });
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -276,12 +287,13 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setSuccessMessage('تم توليد وتنزيل ملف PDF بنجاح بطباعة عربية عالية الدقة!');
-      setTimeout(() => setSuccessMessage(null), 4000);
+      setSuccessMessage(`تم توليد وتنزيل ملف PDF بنجاح (${quantity} كرت في ${totalPages} صفحة A4 عالية الدقة)!`);
+      setTimeout(() => setSuccessMessage(null), 4500);
     } catch (err) {
       console.error('PDF generation error', err);
     } finally {
       setIsGeneratingPdf(false);
+      setPdfProgress(null);
     }
   };
 
@@ -418,7 +430,9 @@ export const CardStudio: React.FC<CardStudioProps> = ({
               ) : (
                 <FileDown className="w-4 h-4" />
               )}
-              {isGeneratingPdf ? 'جاري إنشاء PDF...' : 'تحميل PDF (A4)'}
+              {isGeneratingPdf
+                ? (pdfProgress ? `صفحة ${pdfProgress.current} من ${pdfProgress.total}...` : 'جاري إنشاء PDF...')
+                : `تحميل PDF (${quantity} كرت)`}
             </button>
 
             <button
@@ -431,6 +445,22 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Live PDF Progress Bar */}
+        {isGeneratingPdf && pdfProgress && (
+          <div className="mt-4 p-3 bg-sky-950/80 border border-sky-500/40 rounded-xl space-y-1.5 animate-in fade-in">
+            <div className="flex justify-between text-xs text-sky-200 font-bold">
+              <span>جاري رندرة وتوليد صفحات الطباعة بدقة 300 DPI عالية الوضوح...</span>
+              <span className="font-mono">صفحة {pdfProgress.current} من {pdfProgress.total} ({Math.round((pdfProgress.current / pdfProgress.total) * 100)}%)</span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-sky-500 h-2 transition-all duration-150 ease-out"
+                style={{ width: `${Math.round((pdfProgress.current / pdfProgress.total) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Success Alert */}
         {successMessage && (

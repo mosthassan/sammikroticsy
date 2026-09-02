@@ -252,6 +252,22 @@ export interface CardTemplate {
   svgCode?: string;
   isAiGenerated?: boolean;
   createdAt?: string;
+  // Element-Level Styling & Layout Shape Customization
+  elementScale?: number; // Custom scale multiplier (default 1.0)
+  codeBoxStyle?: 'modern_box' | 'pill_badge' | 'ticket_dashed' | 'neon_glow' | 'minimal_clean' | 'split_pin';
+  codeBoxBg?: string;
+  codeBoxBorderColor?: string;
+  codeBoxTextColor?: string;
+  priceTagStyle?: 'pill' | 'ribbon' | 'stamp' | 'glow' | 'minimal';
+  qrFrameStyle?: 'card_rounded' | 'circular' | 'clean_flat' | 'accent_border';
+  qrDarkColor?: string;
+  qrLightColor?: string;
+  headerStyle?: 'transparent' | 'banner_solid' | 'divider_line' | 'floating_chip';
+  networkNameColor?: string;
+  profileNameColor?: string;
+  metaIconsColor?: string;
+  dateBadgeColor?: string;
+  dateBadgeTextColor?: string;
   positions?: {
     networkName?: ElementPosition;
     profileName?: ElementPosition;

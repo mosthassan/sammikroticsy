@@ -50,70 +50,88 @@ Style Preset: "${stylePreset || 'cyber_neon'}"
 
 Return JSON matching the schema with creative Arabic name, full SVG code, and harmonized color palette.`;
 
-    // Generate content with structured JSON output
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userPrompt }]
-        }
-      ],
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: {
-              type: Type.STRING,
-              description: "Short creative Arabic title for the template (e.g. نيون الفضاء السيبراني)"
-            },
-            svgCode: {
-              type: Type.STRING,
-              description: "Clean valid standalone SVG string with viewBox 0 0 850 500"
-            },
-            textColor: {
-              type: Type.STRING,
-              description: "Primary text hex color code (e.g. #ffffff)"
-            },
-            accentColor: {
-              type: Type.STRING,
-              description: "Accent highlight hex color (e.g. #38bdf8)"
-            },
-            badgeBg: {
-              type: Type.STRING,
-              description: "Price badge background hex color (e.g. #f59e0b)"
-            },
-            badgeTextColor: {
-              type: Type.STRING,
-              description: "Price badge text hex color (e.g. #000000)"
-            },
-            bgColor: {
-              type: Type.STRING,
-              description: "Dominant background hex color (e.g. #0f172a)"
-            },
-            themeStyle: {
-              type: Type.STRING,
-              enum: ['cyber_neon', 'modern_dark', 'clean_white', 'royal_gold', 'sky_blue', 'emerald_pro']
-            }
-          },
-          required: [
-            "name",
-            "svgCode",
-            "textColor",
-            "accentColor",
-            "badgeBg",
-            "badgeTextColor",
-            "bgColor",
-            "themeStyle"
-          ]
-        }
-      }
-    });
+    // Multi-model resilience: try gemini-3.7-flash then fallback models
+    let rawText = '';
+    const candidateModels = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-pro-preview"];
+    let lastError: any = null;
 
-    const rawText = response.text || '{}';
-    const parsed = JSON.parse(rawText);
+    for (const modelName of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: userPrompt }]
+            }
+          ],
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                name: {
+                  type: Type.STRING,
+                  description: "Short creative Arabic title for the template (e.g. نيون الفضاء السيبراني)"
+                },
+                svgCode: {
+                  type: Type.STRING,
+                  description: "Clean valid standalone SVG string with viewBox 0 0 850 500"
+                },
+                textColor: {
+                  type: Type.STRING,
+                  description: "Primary text hex color code (e.g. #ffffff)"
+                },
+                accentColor: {
+                  type: Type.STRING,
+                  description: "Accent highlight hex color (e.g. #38bdf8)"
+                },
+                badgeBg: {
+                  type: Type.STRING,
+                  description: "Price badge background hex color (e.g. #f59e0b)"
+                },
+                badgeTextColor: {
+                  type: Type.STRING,
+                  description: "Price badge text hex color (e.g. #000000)"
+                },
+                bgColor: {
+                  type: Type.STRING,
+                  description: "Dominant background hex color (e.g. #0f172a)"
+                },
+                themeStyle: {
+                  type: Type.STRING,
+                  enum: ['cyber_neon', 'modern_dark', 'clean_white', 'royal_gold', 'sky_blue', 'emerald_pro']
+                }
+              },
+              required: [
+                "name",
+                "svgCode",
+                "textColor",
+                "accentColor",
+                "badgeBg",
+                "badgeTextColor",
+                "bgColor",
+                "themeStyle"
+              ]
+            }
+          }
+        });
+        if (response.text) {
+          rawText = response.text;
+          break;
+        }
+      } catch (mErr: any) {
+        lastError = mErr;
+        console.warn(`Model ${modelName} failed, attempting next candidate...`, mErr.message);
+      }
+    }
+
+    if (!rawText && lastError) {
+      throw lastError;
+    }
+
+    const parsed = JSON.parse(rawText || '{}');
 
     // Clean up SVG string
     let cleanSvg = parsed.svgCode || '';

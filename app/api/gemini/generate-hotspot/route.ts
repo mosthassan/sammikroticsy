@@ -61,59 +61,79 @@ Theme Direction: "${themeStyle || 'cyber_neon'}"
 Login Mode: "${loginType || 'single_code'}"
 Support Phone: "${supportPhone || '770000000'}"`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: userPrompt }]
-        }
-      ],
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING, description: "Creative Arabic portal template name (e.g. نيون الفضاء الذكي)" },
-            description: { type: Type.STRING, description: "Short Arabic description of the portal style" },
-            themeStyle: {
-              type: Type.STRING,
-              enum: ['cyber_neon', 'corporate_blue', 'minimal_light', 'luxury_gold', 'custom']
-            },
-            primaryColor: { type: Type.STRING, description: "Primary hex color" },
-            secondaryColor: { type: Type.STRING, description: "Secondary accent hex color" },
-            bgColor: { type: Type.STRING, description: "Background hex color" },
-            textColor: { type: Type.STRING, description: "Main text hex color" },
-            accentColor: { type: Type.STRING, description: "Accent highlight hex color" },
-            welcomeHeadline: { type: Type.STRING, description: "Arabic welcome headline" },
-            welcomeSubheadline: { type: Type.STRING, description: "Arabic welcome subheadline" },
-            htmlLogin: { type: Type.STRING, description: "Complete, standalone HTML5 string for login.html" },
-            htmlStatus: { type: Type.STRING, description: "Complete, standalone HTML5 string for status.html" },
-            htmlAlogin: { type: Type.STRING, description: "Complete, standalone HTML5 string for alogin.html" },
-            htmlLogout: { type: Type.STRING, description: "Complete, standalone HTML5 string for logout.html" }
-          },
-          required: [
-            "name",
-            "description",
-            "themeStyle",
-            "primaryColor",
-            "secondaryColor",
-            "bgColor",
-            "textColor",
-            "accentColor",
-            "welcomeHeadline",
-            "welcomeSubheadline",
-            "htmlLogin",
-            "htmlStatus",
-            "htmlAlogin",
-            "htmlLogout"
-          ]
-        }
-      }
-    });
+    // Multi-model resilience: try gemini-3.7-flash then fallback models
+    let rawText = '';
+    const candidateModels = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-pro-preview"];
+    let lastError: any = null;
 
-    const parsed = JSON.parse(response.text || '{}');
+    for (const modelName of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: userPrompt }]
+            }
+          ],
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "Creative Arabic portal template name (e.g. نيون الفضاء الذكي)" },
+                description: { type: Type.STRING, description: "Short Arabic description of the portal style" },
+                themeStyle: {
+                  type: Type.STRING,
+                  enum: ['cyber_neon', 'corporate_blue', 'minimal_light', 'luxury_gold', 'custom']
+                },
+                primaryColor: { type: Type.STRING, description: "Primary hex color" },
+                secondaryColor: { type: Type.STRING, description: "Secondary accent hex color" },
+                bgColor: { type: Type.STRING, description: "Background hex color" },
+                textColor: { type: Type.STRING, description: "Main text hex color" },
+                accentColor: { type: Type.STRING, description: "Accent highlight hex color" },
+                welcomeHeadline: { type: Type.STRING, description: "Arabic welcome headline" },
+                welcomeSubheadline: { type: Type.STRING, description: "Arabic welcome subheadline" },
+                htmlLogin: { type: Type.STRING, description: "Complete, standalone HTML5 string for login.html" },
+                htmlStatus: { type: Type.STRING, description: "Complete, standalone HTML5 string for status.html" },
+                htmlAlogin: { type: Type.STRING, description: "Complete, standalone HTML5 string for alogin.html" },
+                htmlLogout: { type: Type.STRING, description: "Complete, standalone HTML5 string for logout.html" }
+              },
+              required: [
+                "name",
+                "description",
+                "themeStyle",
+                "primaryColor",
+                "secondaryColor",
+                "bgColor",
+                "textColor",
+                "accentColor",
+                "welcomeHeadline",
+                "welcomeSubheadline",
+                "htmlLogin",
+                "htmlStatus",
+                "htmlAlogin",
+                "htmlLogout"
+              ]
+            }
+          }
+        });
+        if (response.text) {
+          rawText = response.text;
+          break;
+        }
+      } catch (mErr: any) {
+        lastError = mErr;
+        console.warn(`Hotspot model ${modelName} failed, attempting next candidate...`, mErr.message);
+      }
+    }
+
+    if (!rawText && lastError) {
+      throw lastError;
+    }
+
+    const parsed = JSON.parse(rawText || '{}');
 
     return NextResponse.json({
       id: `tpl_hotspot_ai_${Date.now()}`,

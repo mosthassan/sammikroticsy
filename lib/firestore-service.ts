@@ -42,8 +42,7 @@ import {
 // Admin / Owner bootstrap constants
 export const DEFAULT_ADMIN_EMAIL = 'mosthassan.ye@gmail.com';
 export const SUPER_ADMIN_EMAILS: string[] = [
-  'mosthassan.ye@gmail.com',
-  'mosthassan.ye2@gmail.com'
+  'mosthassan.ye@gmail.com'
 ];
 
 export function isSuperAdminEmail(email?: string | null): boolean {

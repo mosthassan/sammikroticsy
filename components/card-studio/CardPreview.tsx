@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Card, CardTemplate, Tenant, ElementPosition } from '@/types';
+import { computeCardAutoScale } from '@/lib/utils';
 import { Wifi, Clock, HardDrive, Phone, Sparkles, Calendar } from 'lucide-react';
 
 interface CardPreviewProps {
@@ -26,12 +27,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
   useEffect(() => {
     let isMounted = true;
+    const darkColor = template.qrDarkColor || (template.themeStyle === 'clean_white' ? '#0f172a' : '#000000');
+    const lightColor = template.qrLightColor || '#ffffff';
+
     QRCode.toDataURL(card.qrData, {
       margin: 1,
       width: 200,
       color: {
-        dark: template.themeStyle === 'clean_white' ? '#0f172a' : '#000000',
-        light: '#ffffff'
+        dark: darkColor,
+        light: lightColor
       }
     }).then(url => {
       if (isMounted) setQrUrl(url);
@@ -42,7 +46,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [card.qrData, template.themeStyle]);
+  }, [card.qrData, template.themeStyle, template.qrDarkColor, template.qrLightColor]);
 
   const bgStyle: React.CSSProperties = {
     backgroundColor: template.bgColor || '#090d16',
@@ -53,16 +57,27 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       : undefined,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    color: template.textColor || '#ffffff'
+    color: template.textColor || '#ffffff',
+    borderRadius: template.borderRadius !== undefined ? `${template.borderRadius}px` : undefined,
+    borderColor: template.borderColor || undefined,
+    borderWidth: template.borderWidth !== undefined ? `${template.borderWidth}px` : undefined
   };
 
   const isDark = template.themeStyle !== 'clean_white';
   const supportNumber = template.supportPhoneText || tenant.phone || '77xxxxxxx';
   const cutStyle = template.cutLineStyle || (template.showCutLines ? 'dashed' : 'none');
 
-  // Dynamic automatic scale factor based on card count / dimensions
-  const cardsPerPage = (template.cardsPerRow || 3) * (template.cardsPerCol || 8);
-  const autoScale = cardsPerPage >= 32 ? 0.78 : cardsPerPage >= 28 ? 0.88 : cardsPerPage <= 12 ? 1.25 : 1.0;
+  // Dynamic automatic scale factor based on card count & dimensions (handles 32, 42, 48 cards smoothly)
+  const autoScale = computeCardAutoScale(
+    template.cardsPerRow || 3,
+    template.cardsPerCol || 8,
+    template.cardWidthMm || 63,
+    template.cardHeightMm || 33,
+    template.elementScale || 1.0
+  );
+
+  // Detect ultra-compact strip (e.g. 42-strip with height <= 22mm)
+  const isCompactStrip = (template.cardHeightMm || 33) <= 22;
 
   const formatCardDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -152,9 +167,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                fontSize: `${(p.fontSize || 11) * autoScale}px`
+                fontSize: `${(p.fontSize || 11) * autoScale}px`,
+                color: template.networkNameColor || (isDark ? '#ffffff' : '#0f172a')
               }}
-              className="flex items-center gap-1 font-bold text-white z-10 drop-shadow-sm"
+              className="flex items-center gap-1 font-bold z-10 drop-shadow-sm"
             >
               <Wifi className="w-3 h-3 text-sky-400 shrink-0" />
               <span className="truncate max-w-[140px]">{tenant.businessName}</span>
@@ -165,17 +181,26 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         {/* 2. Price Badge */}
         {template.showPrice && (() => {
           const p = getPos('price');
+          const priceStyle = template.priceTagStyle || 'pill';
+          const bg = template.badgeBg || '#0284c7';
+          const textCol = template.badgeTextColor || '#ffffff';
+          let shapeClasses = 'rounded-full px-2 py-0.5 shadow-sm';
+          if (priceStyle === 'ribbon') shapeClasses = 'rounded-l-md rounded-r-none px-2 py-0.5 border-r-2 border-white/50 shadow-sm';
+          else if (priceStyle === 'stamp') shapeClasses = 'rounded-md px-1.5 py-0.5 border border-dashed border-white/40 shadow-sm';
+          else if (priceStyle === 'glow') shapeClasses = 'rounded-lg px-2 py-0.5 shadow-[0_0_12px_rgba(245,158,11,0.6)] font-black';
+          else if (priceStyle === 'minimal') shapeClasses = 'bg-transparent border border-current px-1.5 py-0.5 rounded';
+
           return (
             <div
               style={{
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                backgroundColor: template.badgeBg || '#0284c7',
-                color: template.badgeTextColor || '#ffffff',
+                backgroundColor: priceStyle === 'minimal' ? 'transparent' : bg,
+                color: textCol,
                 fontSize: `${(p.fontSize || 10) * autoScale}px`
               }}
-              className="px-2 py-0.5 rounded-full font-black shadow-sm flex items-center gap-0.5 tabular-nums z-10"
+              className={`font-black flex items-center gap-0.5 tabular-nums z-10 ${shapeClasses}`}
             >
               <span>{card.price}</span>
               <span className="text-[7.5px] font-normal">{tenant.currency}</span>
@@ -192,9 +217,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                fontSize: `${(p.fontSize || 7.5) * autoScale}px`
+                fontSize: `${(p.fontSize || 7.5) * autoScale}px`,
+                color: template.dateBadgeTextColor || (isDark ? '#a5f3fc' : '#0284c7'),
+                backgroundColor: template.dateBadgeColor || undefined
               }}
-              className="px-1.5 py-0.5 rounded bg-white/10 text-sky-200 font-mono flex items-center gap-0.5 z-10"
+              className="px-1.5 py-0.5 rounded font-mono flex items-center gap-0.5 z-10"
             >
               <Calendar className="w-2 h-2 text-sky-300" />
               <span>{formattedDate}</span>
@@ -206,14 +233,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         {template.showQr && (() => {
           const p = getPos('qr');
           const qrPixel = Math.round((template.qrSizeMm || 18) * 2.8 * autoScale);
+          const qrFrame = template.qrFrameStyle || 'card_rounded';
+          let frameClass = 'flex flex-col items-center p-0.5 bg-white rounded-lg shadow-sm border border-slate-200/40 z-10';
+          if (qrFrame === 'circular') frameClass = 'flex flex-col items-center p-0.5 bg-white rounded-full shadow-sm border-2 border-slate-200 overflow-hidden z-10';
+          else if (qrFrame === 'clean_flat') frameClass = 'flex flex-col items-center p-0.5 bg-white rounded-none z-10';
+          else if (qrFrame === 'accent_border') frameClass = 'flex flex-col items-center p-0.5 bg-white rounded-lg shadow-sm border-2 z-10';
+
           return (
             <div
               style={{
                 position: 'absolute',
                 right: `${p.x}%`,
-                top: `${p.y}%`
+                top: `${p.y}%`,
+                borderColor: qrFrame === 'accent_border' ? (template.accentColor || '#38bdf8') : undefined
               }}
-              className="flex flex-col items-center p-0.5 bg-white rounded-lg shadow-sm border border-slate-200/40 z-10"
+              className={frameClass}
             >
               {qrUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -221,7 +255,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                   src={qrUrl}
                   alt="QR"
                   style={{ width: `${qrPixel}px`, height: `${qrPixel}px` }}
-                  className="object-contain rounded"
+                  className={`object-contain ${qrFrame === 'circular' ? 'rounded-full' : 'rounded'}`}
                 />
               ) : (
                 <div style={{ width: `${qrPixel}px`, height: `${qrPixel}px` }} className="bg-slate-200 animate-pulse rounded" />
@@ -239,9 +273,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                fontSize: `${(p.fontSize || 10) * autoScale}px`
+                fontSize: `${(p.fontSize || 10) * autoScale}px`,
+                color: template.profileNameColor || '#38bdf8'
               }}
-              className="font-bold text-sky-400 z-10 truncate max-w-[120px]"
+              className="font-bold z-10 truncate max-w-[120px]"
             >
               {card.profileName}
             </div>
@@ -269,19 +304,38 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         {/* 7. Voucher Code Box */}
         {template.showCode && (() => {
           const p = getPos('code');
+          const codeStyle = template.codeBoxStyle || 'modern_box';
+          const customBg = template.codeBoxBg || (isDark ? 'rgba(2, 6, 23, 0.95)' : '#f8fafc');
+          const customBorder = template.codeBoxBorderColor || (isDark ? 'rgba(56, 189, 248, 0.6)' : '#cbd5e1');
+          const customText = template.codeBoxTextColor || (isDark ? '#ffffff' : '#020617');
+
+          let shapeClasses = 'rounded-md border shadow-inner';
+          let extraStyle: React.CSSProperties = {
+            backgroundColor: customBg,
+            borderColor: customBorder,
+            color: customText
+          };
+
+          if (codeStyle === 'pill_badge') shapeClasses = 'rounded-full border-2 shadow-sm';
+          else if (codeStyle === 'ticket_dashed') shapeClasses = 'rounded-md border-2 border-dashed shadow-inner';
+          else if (codeStyle === 'neon_glow') {
+            shapeClasses = 'rounded-md border-2';
+            extraStyle.boxShadow = `0 0 10px ${template.codeBoxBorderColor || '#38bdf8'}`;
+          } else if (codeStyle === 'minimal_clean') {
+            shapeClasses = 'border-b-2 rounded-none shadow-none';
+            extraStyle.backgroundColor = 'transparent';
+          }
+
           return (
             <div
               style={{
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
+                ...extraStyle,
                 fontSize: `${(p.fontSize || 13) * autoScale}px`
               }}
-              className={`rounded-md px-2.5 py-0.5 font-mono font-bold tracking-wider shadow-inner text-center flex items-center justify-center gap-1 z-10 ${
-                isDark
-                  ? 'bg-slate-950/95 text-white border border-sky-400/60 shadow-sky-950/40'
-                  : 'bg-slate-50 text-slate-950 border border-slate-400'
-              }`}
+              className={`px-2.5 py-0.5 font-mono font-bold tracking-wider text-center flex items-center justify-center gap-1 z-10 ${shapeClasses}`}
             >
               <span>{card.code}</span>
               {template.showScratchGuide && (
@@ -321,9 +375,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                fontSize: `${(p.fontSize || 8) * autoScale}px`
+                fontSize: `${(p.fontSize || 8) * autoScale}px`,
+                color: template.metaIconsColor || (isDark ? '#ffffff' : '#0f172a')
               }}
-              className={`flex items-center gap-0.5 font-bold z-10 ${isDark ? 'text-white' : 'text-slate-900'}`}
+              className="flex items-center gap-0.5 font-bold z-10"
             >
               <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />
               <span>{card.uptimeDisplay}</span>
@@ -340,9 +395,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 position: 'absolute',
                 right: `${p.x}%`,
                 top: `${p.y}%`,
-                fontSize: `${(p.fontSize || 8) * autoScale}px`
+                fontSize: `${(p.fontSize || 8) * autoScale}px`,
+                color: template.metaIconsColor || (isDark ? '#ffffff' : '#0f172a')
               }}
-              className={`flex items-center gap-0.5 font-bold z-10 ${isDark ? 'text-white' : 'text-slate-900'}`}
+              className="flex items-center gap-0.5 font-bold z-10"
             >
               <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
               <span>{card.byteDisplay}</span>
@@ -390,7 +446,162 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     );
   }
 
-  // Default Standard Fluid Card Layout (Scaled to match 32/24/18 cards per sheet)
+  // --- SPECIAL COMPACT STRIP LAYOUT (For 42 cards strip 63x19mm or cards where height <= 22mm) ---
+  if (isCompactStrip) {
+    const compactQrSize = Math.round(Math.max(22, 28 * autoScale));
+    const priceStyle = template.priceTagStyle || 'pill';
+    const bg = template.badgeBg || '#0284c7';
+    const textCol = template.badgeTextColor || '#ffffff';
+    const customBg = template.codeBoxBg || (isDark ? 'rgba(2, 6, 23, 0.95)' : '#f8fafc');
+    const customBorder = template.codeBoxBorderColor || (isDark ? 'rgba(56, 189, 248, 0.6)' : '#cbd5e1');
+    const customText = template.codeBoxTextColor || (isDark ? '#ffffff' : '#020617');
+
+    return (
+      <div
+        id={`card-${card.id}`}
+        style={{
+          ...bgStyle,
+          width: isZoomed ? '350px' : '100%',
+          aspectRatio: `${template.cardWidthMm || 63}/${template.cardHeightMm || 19}`,
+          transform: scale !== 1 ? `scale(${scale})` : undefined,
+          transformOrigin: 'top right'
+        }}
+        className={`relative overflow-hidden rounded-lg border border-slate-700/50 shadow-sm p-1 flex items-center justify-between gap-1 select-none text-right transition-all duration-200 ${className}`}
+        dir="rtl"
+      >
+        {/* Cut lines */}
+        {cutStyle === 'dashed' && (
+          <div className="absolute inset-0 border border-dashed border-slate-400/40 rounded-lg pointer-events-none" />
+        )}
+        {cutStyle === 'solid' && (
+          <div className="absolute inset-0 border border-slate-400/30 rounded-lg pointer-events-none" />
+        )}
+
+        {/* Right Section: Network Name + Profile + Price */}
+        <div className="flex flex-col justify-between h-full min-w-0 flex-1 py-0.5">
+          <div className="flex items-center gap-1">
+            <Wifi className="w-2 h-2 text-sky-400 shrink-0" />
+            <span
+              style={{
+                fontSize: `${Math.round(8.5 * autoScale)}px`,
+                color: template.networkNameColor || (isDark ? '#ffffff' : '#0f172a')
+              }}
+              className="font-bold truncate"
+            >
+              {tenant.businessName}
+            </span>
+            {template.showPrice && (
+              <span
+                style={{
+                  backgroundColor: priceStyle === 'minimal' ? 'transparent' : bg,
+                  color: textCol,
+                  fontSize: `${Math.round(8 * autoScale)}px`
+                }}
+                className="px-1 py-0.2 rounded-full font-black tabular-nums shrink-0"
+              >
+                {card.price} {tenant.currency}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span
+              style={{
+                fontSize: `${Math.round(7.5 * autoScale)}px`,
+                color: template.profileNameColor || '#38bdf8'
+              }}
+              className="font-bold truncate"
+            >
+              {card.profileName}
+            </span>
+            {template.showUptime && (
+              <span style={{ fontSize: `${Math.round(6.5 * autoScale)}px` }} className="text-slate-300 font-medium">
+                • {card.uptimeDisplay}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Center Section: Code Box */}
+        <div className="flex-1 px-1 flex flex-col items-center justify-center">
+          <div
+            style={{
+              backgroundColor: customBg,
+              borderColor: customBorder,
+              color: customText,
+              fontSize: `${Math.round((template.fontSizeCode || 12) * autoScale)}px`
+            }}
+            className="py-0.5 px-2 rounded font-mono font-bold text-center tracking-wider border shadow-inner w-full flex items-center justify-center"
+          >
+            {card.code}
+          </div>
+          {template.showPin && card.password && card.password !== card.code && (
+            <span style={{ fontSize: `${Math.round(6.5 * autoScale)}px` }} className="text-amber-400 font-mono font-bold mt-0.5">
+              PIN: {card.password}
+            </span>
+          )}
+        </div>
+
+        {/* Left Section: Compact QR */}
+        {template.showQr && (
+          <div className="shrink-0 flex flex-col items-center justify-center bg-white p-0.5 rounded shadow-sm">
+            {qrUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrUrl}
+                alt="QR"
+                style={{ width: `${compactQrSize}px`, height: `${compactQrSize}px` }}
+                className="object-contain rounded"
+              />
+            ) : (
+              <div style={{ width: `${compactQrSize}px`, height: `${compactQrSize}px` }} className="bg-slate-200 animate-pulse rounded" />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- DEFAULT STANDARD FLUID CARD LAYOUT (Adaptive for 24, 32, 36, 40 cards) ---
+  const headerStyle = template.headerStyle || 'divider_line';
+  const qrPixel = Math.round(Math.max(28, (template.qrSizeMm || 15) * 2.8 * autoScale));
+  const priceStyle = template.priceTagStyle || 'pill';
+  const priceBg = template.badgeBg || '#0284c7';
+  const priceTextColor = template.badgeTextColor || '#ffffff';
+  let priceShapeClass = 'rounded-full px-1.5 py-0.5 shadow-sm';
+  if (priceStyle === 'ribbon') priceShapeClass = 'rounded-l-md rounded-r-none px-2 py-0.5 border-r-2 border-white/50 shadow-sm';
+  else if (priceStyle === 'stamp') priceShapeClass = 'rounded-md px-1.5 py-0.5 border border-dashed border-white/40 shadow-sm';
+  else if (priceStyle === 'glow') priceShapeClass = 'rounded-lg px-2 py-0.5 shadow-[0_0_12px_rgba(245,158,11,0.6)] font-black';
+  else if (priceStyle === 'minimal') priceShapeClass = 'bg-transparent border border-current px-1.5 py-0.5 rounded';
+
+  const codeStyle = template.codeBoxStyle || 'modern_box';
+  const codeBg = template.codeBoxBg || (isDark ? 'rgba(2, 6, 23, 0.95)' : '#f8fafc');
+  const codeBorder = template.codeBoxBorderColor || (isDark ? 'rgba(56, 189, 248, 0.6)' : '#cbd5e1');
+  const codeText = template.codeBoxTextColor || (isDark ? '#ffffff' : '#020617');
+
+  let codeShapeClass = 'rounded-md border shadow-inner';
+  let codeExtraStyle: React.CSSProperties = {
+    backgroundColor: codeBg,
+    borderColor: codeBorder,
+    color: codeText
+  };
+
+  if (codeStyle === 'pill_badge') codeShapeClass = 'rounded-full border-2 shadow-sm';
+  else if (codeStyle === 'ticket_dashed') codeShapeClass = 'rounded-md border-2 border-dashed shadow-inner';
+  else if (codeStyle === 'neon_glow') {
+    codeShapeClass = 'rounded-md border-2';
+    codeExtraStyle.boxShadow = `0 0 10px ${template.codeBoxBorderColor || '#38bdf8'}`;
+  } else if (codeStyle === 'minimal_clean') {
+    codeShapeClass = 'border-b-2 rounded-none shadow-none';
+    codeExtraStyle.backgroundColor = 'transparent';
+  }
+
+  const qrFrame = template.qrFrameStyle || 'card_rounded';
+  let qrFrameClass = 'bg-white p-0.5 rounded-lg shadow-sm border border-slate-200/40 relative group';
+  if (qrFrame === 'circular') qrFrameClass = 'bg-white p-0.5 rounded-full shadow-sm border-2 border-slate-200 overflow-hidden relative group';
+  else if (qrFrame === 'clean_flat') qrFrameClass = 'bg-white p-0.5 rounded-none relative group';
+  else if (qrFrame === 'accent_border') qrFrameClass = 'bg-white p-0.5 rounded-lg shadow-sm border-2 relative group';
+
   return (
     <div
       id={`card-${card.id}`}
@@ -430,15 +641,26 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
       )}
 
       {/* Top Header Bar */}
-      <div className="relative z-10 flex items-center justify-between gap-1 border-b border-white/10 pb-0.5">
+      <div 
+        className={`relative z-10 flex items-center justify-between gap-1 pb-0.5 ${
+          headerStyle === 'divider_line'
+            ? 'border-b border-white/10'
+            : headerStyle === 'banner_solid'
+            ? 'bg-sky-950/60 -mx-2 -mt-2 p-1.5 mb-1 rounded-t-xl border-b border-sky-500/30'
+            : ''
+        }`}
+      >
         <div className="flex items-center gap-1 min-w-0">
           <div className="w-4 h-4 rounded-md bg-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
             <Wifi className="w-2.5 h-2.5" />
           </div>
           {template.showNetworkName && (
             <span 
-              style={{ fontSize: `${Math.round(10.5 * autoScale)}px` }}
-              className="font-bold truncate tracking-tight text-white drop-shadow-sm"
+              style={{ 
+                fontSize: `${Math.round(10.5 * autoScale)}px`,
+                color: template.networkNameColor || (isDark ? '#ffffff' : '#0f172a')
+              }}
+              className="font-bold truncate tracking-tight drop-shadow-sm"
             >
               {tenant.businessName}
             </span>
@@ -448,8 +670,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         <div className="flex items-center gap-1">
           {template.showCreatedAt && formattedDate && (
             <span 
-              style={{ fontSize: `${Math.round(7 * autoScale)}px` }}
-              className="px-1 py-0.5 rounded bg-white/10 text-sky-200 font-mono flex items-center gap-0.5" 
+              style={{ 
+                fontSize: `${Math.round(7 * autoScale)}px`,
+                color: template.dateBadgeTextColor || (isDark ? '#a5f3fc' : '#0284c7'),
+                backgroundColor: template.dateBadgeColor || undefined
+              }}
+              className="px-1 py-0.5 rounded bg-white/10 font-mono flex items-center gap-0.5" 
               title="تأريخ الإنشاء"
             >
               <Calendar className="w-2 h-2 text-sky-300" />
@@ -467,11 +693,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
           {template.showPrice && (
             <div 
               style={{ 
-                backgroundColor: template.badgeBg || '#0284c7', 
-                color: template.badgeTextColor || '#ffffff',
+                backgroundColor: priceStyle === 'minimal' ? 'transparent' : priceBg, 
+                color: priceTextColor,
                 fontSize: `${Math.round(9.5 * autoScale)}px`
               }}
-              className="px-1.5 py-0.5 rounded-full font-black shrink-0 shadow-sm flex items-center gap-0.5 tracking-tight tabular-nums"
+              className={`font-black shrink-0 flex items-center gap-0.5 tracking-tight tabular-nums ${priceShapeClass}`}
             >
               <span>{card.price}</span>
               <span className="text-[7px] font-normal">{tenant.currency}</span>
@@ -485,23 +711,26 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         {/* QR Code Section */}
         {template.showQr && (
           <div className="col-span-4 flex flex-col items-center justify-center">
-            <div className="bg-white p-0.5 rounded-lg shadow-sm border border-slate-200/40 relative group">
+            <div 
+              className={qrFrameClass}
+              style={{ borderColor: qrFrame === 'accent_border' ? (template.accentColor || '#38bdf8') : undefined }}
+            >
               {qrUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={qrUrl}
                   alt="QR Login"
                   style={{
-                    width: `${Math.round(48 * autoScale)}px`,
-                    height: `${Math.round(48 * autoScale)}px`
+                    width: `${qrPixel}px`,
+                    height: `${qrPixel}px`
                   }}
-                  className="object-contain rounded"
+                  className={`object-contain ${qrFrame === 'circular' ? 'rounded-full' : 'rounded'}`}
                 />
               ) : (
                 <div 
                   style={{
-                    width: `${Math.round(48 * autoScale)}px`,
-                    height: `${Math.round(48 * autoScale)}px`
+                    width: `${qrPixel}px`,
+                    height: `${qrPixel}px`
                   }}
                   className="bg-slate-200 animate-pulse rounded" 
                 />
@@ -521,8 +750,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
           {template.showProfileName && (
             <div className="flex items-center justify-between gap-1">
               <span 
-                style={{ fontSize: `${Math.round(9.5 * autoScale)}px` }}
-                className="font-bold text-sky-400 truncate"
+                style={{ 
+                  fontSize: `${Math.round(9.5 * autoScale)}px`,
+                  color: template.profileNameColor || '#38bdf8'
+                }}
+                className="font-bold truncate"
               >
                 {card.profileName}
               </span>
@@ -537,19 +769,37 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
             </div>
           )}
 
-          {/* Voucher Code Box with Scratch Guide Option */}
+          {/* Voucher Code Box */}
           {template.showCode && (
             <div className="relative">
-              <div 
-                style={{ fontSize: `${Math.round((template.fontSizeCode || 13) * autoScale)}px` }}
-                className={`py-0.5 px-1.5 rounded font-mono font-bold text-center tracking-wider shadow-inner transition-colors flex items-center justify-center gap-1 ${
-                  isDark 
-                    ? 'bg-slate-950/95 text-white border border-sky-400/60 shadow-sky-950/40' 
-                    : 'bg-slate-50 text-slate-950 border border-slate-400'
-                }`}
-              >
-                <span>{card.code}</span>
-              </div>
+              {codeStyle === 'split_pin' ? (
+                <div className="flex items-center justify-center gap-0.5 py-0.5">
+                  {card.code.split('').map((ch, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        fontSize: `${Math.round((template.fontSizeCode || 13) * autoScale)}px`,
+                        backgroundColor: codeBg,
+                        borderColor: codeBorder,
+                        color: codeText
+                      }}
+                      className="w-5 h-6 rounded border font-mono font-black flex items-center justify-center shadow-inner"
+                    >
+                      {ch}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div 
+                  style={{ 
+                    ...codeExtraStyle,
+                    fontSize: `${Math.round((template.fontSizeCode || 13) * autoScale)}px` 
+                  }}
+                  className={`py-0.5 px-1.5 font-mono font-bold text-center tracking-wider transition-colors flex items-center justify-center gap-1 ${codeShapeClass}`}
+                >
+                  <span>{card.code}</span>
+                </div>
+              )}
 
               {/* Scratch Mask Area simulation overlay */}
               {template.showScratchGuide && (
@@ -578,8 +828,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
       {/* Bottom Footer: Limits (Time, Data, Speed) & Instructions */}
       <div 
-        style={{ fontSize: `${Math.round(7.5 * autoScale)}px` }}
-        className={`relative z-10 flex items-center justify-between border-t border-white/10 pt-0.5 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}
+        style={{ 
+          fontSize: `${Math.round(7.5 * autoScale)}px`,
+          color: template.metaIconsColor || (isDark ? '#f1f5f9' : '#1e293b')
+        }}
+        className="relative z-10 flex items-center justify-between border-t border-white/10 pt-0.5"
       >
         <div className="flex items-center gap-1.5 font-bold">
           {template.showUptime && (
@@ -609,3 +862,4 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     </div>
   );
 };
+

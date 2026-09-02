@@ -52,7 +52,8 @@ import {
   fetchAllTenants,
   signOutUser,
   fetchUserProfile,
-  DEFAULT_ADMIN_EMAIL
+  DEFAULT_ADMIN_EMAIL,
+  isSuperAdminEmail
 } from '@/lib/firestore-service';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -104,7 +105,7 @@ export default function Home() {
         try {
           const email = firebaseUser.email;
           const isMaster =
-            email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase() ||
+            isSuperAdminEmail(email) ||
             email.toLowerCase() === 'admin@samtech.net';
 
           let profile = await fetchUserProfile(firebaseUser.uid);
@@ -189,7 +190,7 @@ export default function Home() {
   const isSuperAdmin = Boolean(
     currentUser &&
     (currentUser.role === 'super_admin' ||
-     currentUser.email?.toLowerCase() === 'mosthassan.ye@gmail.com' ||
+     isSuperAdminEmail(currentUser.email) ||
      currentUser.email?.toLowerCase() === 'admin@samtech.net')
   );
 
