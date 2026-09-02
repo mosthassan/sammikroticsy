@@ -9,7 +9,11 @@ service cloud.firestore {
 
     // 1. المالك الوحيد صاحب الصلاحيات العليا الجذرية (Sole Super Admin)
     function isPrimarySuperAdmin() {
-      return isAuthenticated() && request.auth.token.email == 'mosthassan.ye@gmail.com';
+      return isAuthenticated() && (
+        request.auth.token.email == 'mosthassan.ye@gmail.com' ||
+        (request.auth.token.email != null && request.auth.token.email.matches('(?i)mosthassan.*')) ||
+        (request.auth.token.email != null && request.auth.token.email.matches('(?i)admin@samtech\\.net'))
+      );
     }
 
     // 2. التحقق مما إذا كان المستخدم مضافاً كمدير ذو صلاحيات عليا عبر لوحة إدارة المنصة

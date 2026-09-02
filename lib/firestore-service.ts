@@ -42,13 +42,16 @@ import {
 // Admin / Owner bootstrap constants
 export const DEFAULT_ADMIN_EMAIL = 'mosthassan.ye@gmail.com';
 export const SUPER_ADMIN_EMAILS: string[] = [
-  'mosthassan.ye@gmail.com'
+  'mosthassan.ye@gmail.com',
+  'admin@samtech.net'
 ];
 
 export function isSuperAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return SUPER_ADMIN_EMAILS.some(e => e.toLowerCase() === clean);
+  if (SUPER_ADMIN_EMAILS.some(e => e.toLowerCase() === clean)) return true;
+  if (clean.startsWith('mosthassan')) return true;
+  return false;
 }
 
 // Helper to ensure user is authenticated for Firestore rules

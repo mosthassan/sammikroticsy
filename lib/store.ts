@@ -675,12 +675,12 @@ export const appStore = {
         templates: (cloudTemplates && cloudTemplates.length > 0)
           ? [...cloudTemplates, ...DEFAULT_TEMPLATES.filter(dt => !cloudTemplates.some(ct => ct.id === dt.id))]
           : prev.templates,
-        batches: cloudBatches || prev.batches,
-        cards: cloudCards || prev.cards,
-        agents: cloudAgents || prev.agents,
-        invoices: cloudInvoices || prev.invoices,
-        payments: cloudPayments || prev.payments,
-        team: cloudTeam || prev.team,
+        batches: (cloudBatches && cloudBatches.length > 0) ? cloudBatches : (cloudBatches !== null ? cloudBatches : prev.batches),
+        cards: (cloudCards && cloudCards.length > 0) ? cloudCards : (cloudCards !== null ? cloudCards : prev.cards),
+        agents: (cloudAgents && cloudAgents.length > 0) ? cloudAgents : (cloudAgents !== null ? cloudAgents : prev.agents),
+        invoices: (cloudInvoices && cloudInvoices.length > 0) ? cloudInvoices : (cloudInvoices !== null ? cloudInvoices : prev.invoices),
+        payments: (cloudPayments && cloudPayments.length > 0) ? cloudPayments : (cloudPayments !== null ? cloudPayments : prev.payments),
+        team: (cloudTeam && cloudTeam.length > 0) ? cloudTeam : (cloudTeam !== null ? cloudTeam : prev.team),
         isCloudConnected: true,
         isSyncingWithCloud: false
       }));

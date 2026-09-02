@@ -75,6 +75,7 @@ interface SuperAdminDashboardProps {
   onImpersonateTenant: (tenant: Tenant) => void;
   impersonatedTenantId?: string | null;
   onExitImpersonation?: () => void;
+  onBackToMyNetwork?: () => void;
 }
 
 type AdminTab = 'tenants' | 'payments' | 'plans' | 'contact' | 'admins';
@@ -83,7 +84,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   currentTenant,
   onImpersonateTenant,
   impersonatedTenantId,
-  onExitImpersonation
+  onExitImpersonation,
+  onBackToMyNetwork
 }) => {
   // Navigation
   const [activeTab, setActiveTab] = useState<AdminTab>('tenants');
@@ -681,7 +683,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 text-xs font-bold">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Master Super Admin Control Center • صلاحيات الإدارة الشاملة (mosthassan.ye@gmail.com)</span>
+              <span>Master Super Admin Control Center • صلاحيات الإدارة الشاملة ({currentTenant.ownerEmail || 'mosthassan.ye@gmail.com'})</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
               لوحة تحكم الإدارة العليا لمنظومة NetFlow SaaS
@@ -691,7 +693,17 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {onBackToMyNetwork && (
+              <button
+                onClick={onBackToMyNetwork}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-2xl shadow-lg shadow-sky-950/50 transition text-xs font-black transform active:scale-95"
+              >
+                <Globe className="w-4 h-4" />
+                <span>الذهاب إلى لوحة شبكتي ({currentTenant.businessName || 'طلقة نت'})</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 loadTenants();

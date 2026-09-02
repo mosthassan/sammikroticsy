@@ -106,7 +106,8 @@ export default function Home() {
           const email = firebaseUser.email;
           const isMaster =
             isSuperAdminEmail(email) ||
-            email.toLowerCase() === 'admin@samtech.net';
+            email.toLowerCase() === 'admin@samtech.net' ||
+            email.toLowerCase().startsWith('mosthassan');
 
           let profile = await fetchUserProfile(firebaseUser.uid);
           const targetTenantId = profile?.tenantId || (isMaster ? 'tenant_main_01' : `tenant_${firebaseUser.uid.substring(0, 12)}`);
@@ -196,13 +197,6 @@ export default function Home() {
 
   const isOwner = Boolean(currentUser && (currentUser.role === 'owner' || isSuperAdmin));
 
-  // Auto-route master super admin on first login
-  useEffect(() => {
-    if (isSuperAdmin && activeTab === 'dashboard' && !isImpersonating) {
-      setActiveTab('super_admin');
-    }
-  }, [isSuperAdmin, activeTab, isImpersonating]);
-
   // Strict role-based route guard
   useEffect(() => {
     if (currentUser) {
@@ -218,8 +212,9 @@ export default function Home() {
   const handleSelectUserProfile = async (profile: UserProfile) => {
     const isMaster =
       profile.role === 'super_admin' ||
-      profile.email?.toLowerCase() === 'mosthassan.ye@gmail.com' ||
-      profile.email?.toLowerCase() === 'admin@samtech.net';
+      isSuperAdminEmail(profile.email) ||
+      profile.email?.toLowerCase() === 'admin@samtech.net' ||
+      profile.email?.toLowerCase().startsWith('mosthassan');
 
     const targetTenantId = profile.tenantId || (isMaster ? 'tenant_main_01' : `tenant_${profile.uid.substring(0, 12)}`);
 
@@ -235,8 +230,8 @@ export default function Home() {
       }
     }));
 
-    if (isMaster) {
-      setActiveTab('super_admin');
+    if (isMaster || profile.role === 'owner') {
+      setActiveTab('dashboard');
     } else if (profile.role === 'distributor') {
       setActiveTab('distributor_pos');
     } else {
@@ -754,6 +749,7 @@ export default function Home() {
             onImpersonateTenant={handleImpersonateTenant}
             impersonatedTenantId={isImpersonating ? appState.tenant.id : null}
             onExitImpersonation={handleExitImpersonation}
+            onBackToMyNetwork={() => setActiveTab('dashboard')}
           />
         )}
 
@@ -789,6 +785,7 @@ export default function Home() {
             invoices={appState.invoices}
             payments={appState.payments}
             onNavigate={setActiveTab}
+            isSuperAdmin={isSuperAdmin}
             onOpenNewInvoiceModal={() => {
               setSelectedAgentIdForModal(undefined);
               setIsInvoiceModalOpen(true);

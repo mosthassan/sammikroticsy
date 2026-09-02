@@ -58,6 +58,7 @@ interface DashboardOverviewProps {
   onOpenNewInvoiceModal: () => void;
   onOpenNewPaymentModal: () => void;
   onOpenSubscriptionModal?: () => void;
+  isSuperAdmin?: boolean;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -71,7 +72,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onNavigate,
   onOpenNewInvoiceModal,
   onOpenNewPaymentModal,
-  onOpenSubscriptionModal
+  onOpenSubscriptionModal,
+  isSuperAdmin
 }) => {
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -140,6 +142,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
         {/* Action Triggers */}
         <div className="flex flex-wrap items-center gap-2">
+          {isSuperAdmin && (
+            <button
+              onClick={() => onNavigate('admin')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-900/80 to-indigo-900/80 hover:from-purple-800 hover:to-indigo-800 text-purple-200 border border-purple-500/40 rounded-xl text-xs font-black shadow-md shadow-purple-950/40 transition transform active:scale-95"
+              title="الانتقال إلى لوحة تحكم الإدارة العليا لمنظومة NetFlow SaaS"
+            >
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span>إدارة المنصة (Super Admin) 👑</span>
+            </button>
+          )}
+
           <button
             id="quick-new-batch-btn"
             onClick={() => onNavigate('studio')}

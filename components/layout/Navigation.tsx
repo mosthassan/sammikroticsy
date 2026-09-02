@@ -139,7 +139,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <nav className="hidden lg:flex items-center gap-1">
             {navItems.map(item => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = activeTab === item.id || (item.id === 'admin' && activeTab === 'super_admin');
               return (
                 <button
                   key={item.id}
@@ -274,7 +274,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <div className="lg:hidden py-3 border-t border-slate-800/80 space-y-1">
             {navItems.map(item => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = activeTab === item.id || (item.id === 'admin' && activeTab === 'super_admin');
               return (
                 <button
                   key={item.id}
