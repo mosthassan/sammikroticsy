@@ -99,9 +99,21 @@ export type CodeCharSet =
   | 'alphanumeric_lower' 
   | 'alphanumeric_mixed';
 
+export interface CardBatchItem {
+  username: string;
+  password?: string;
+  profile: string;
+  limitBytesTotal: string;
+  limitUptime: string;
+  comment: string;
+  [key: string]: any;
+}
+
 export interface CardBatch {
   id: string;
+  batchId?: string;
   tenantId: string;
+  routerToken?: string;
   batchNumber: string;
   profileId: string;
   profileName: string;
@@ -121,8 +133,11 @@ export interface CardBatch {
   templateId: string;
   generatedAt: string;
   status: 'active' | 'archived' | 'synced' | 'pending';
+  synced?: boolean;
   syncedAt?: string;
   lastSyncSource?: string;
+  cards?: CardBatchItem[];
+  createdAt?: string | any;
 }
 
 export interface Agent {

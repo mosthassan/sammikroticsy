@@ -48,6 +48,19 @@
         "status": { "type": "string", "enum": ["in_stock", "with_agent", "sold", "used", "expired"] }
       },
       "required": ["id", "code", "batchNumber", "status"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "Card batch containing pending hotspot vouchers for MikroTik sync",
+      "type": "object",
+      "properties": {
+        "batchId": { "type": "string" },
+        "routerToken": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "synced", "archived", "active"] },
+        "cards": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["batchId", "routerToken", "status", "cards"]
     }
   }
 }

@@ -343,13 +343,22 @@ export default function Home() {
   };
 
   // Handlers with Optimistic State + Background Firestore Persistence
-  const handleBatchSaved = (batch: CardBatch, newCards: Card[]) => {
+  const handleBatchSaved = async (batch: CardBatch, newCards: Card[]) => {
     const tenantId = appState?.tenant.id || 'tenant_main_01';
-    
+    const activeRouterToken = appState?.tenant.settings?.syncToken || batch.routerToken || 'sam_sec_89df24a67e12c4';
+
+    const pendingBatch: CardBatch = {
+      ...batch,
+      tenantId,
+      routerToken: activeRouterToken,
+      status: 'pending',
+      synced: false
+    };
+
     // 1. Optimistic Local Update
     updateState(prev => ({
       ...prev,
-      batches: [batch, ...prev.batches],
+      batches: [pendingBatch, ...prev.batches.filter(b => b.id !== pendingBatch.id)],
       cards: [...newCards, ...prev.cards],
       syncStatus: {
         ...prev.syncStatus,
@@ -357,10 +366,12 @@ export default function Home() {
       }
     }));
 
-    // 2. Persist to Firestore in background
-    saveBatchAndCards(tenantId, batch, newCards).catch(err => {
-      console.error('Failed to sync batch to Firestore:', err);
-    });
+    // 2. Persist to Firestore and return the promise so CardStudio awaits it
+    const result = await saveBatchAndCards(tenantId, pendingBatch, newCards, activeRouterToken);
+    if (!result.success) {
+      throw new Error(result.error || 'فشل حفظ الدفعة والكروت في السحابة');
+    }
+    return result;
   };
 
   const handleDeleteBatch = (batchId: string) => {

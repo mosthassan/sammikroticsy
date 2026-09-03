@@ -844,7 +844,9 @@ export function generateBatchCards(
     totalWholesaleValue: params.quantity * params.profile.wholesalePrice,
     templateId: params.templateId,
     generatedAt: now,
-    status: 'active'
+    routerToken: params.tenant.settings?.syncToken || 'sam_sec_89df24a67e12c4',
+    status: 'pending',
+    synced: false
   };
 
   return { batch, cards: generatedCards };
@@ -856,7 +858,9 @@ export function generateBatchCards(
 export {
   sanitizeRouterOSValue,
   sanitizeRouterOSIdentifier,
-  sanitizeRouterOSComment
+  sanitizeRouterOSComment,
+  formatByteLimit,
+  formatUptimeLimit
 } from './routeros-utils';
 
 // RouterOS Script Generators

@@ -11,10 +11,12 @@ import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store'
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { saveTemplateToFirestore, loadTemplatesFromFirestore } from '@/lib/firestore-service';
 import { exportCardElementAsPng, exportTemplateBackgroundAsPng } from '@/lib/export-image';
+import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from '@/lib/routeros-utils';
 import {
   FileDown,
   Printer,
   CheckCircle,
+  AlertCircle,
   Eye,
   RefreshCw,
   Move,
@@ -27,7 +29,7 @@ interface CardStudioProps {
   tenant: Tenant;
   profiles: Profile[];
   templates: CardTemplate[];
-  onBatchSaved: (batch: CardBatch, cards: Card[]) => void;
+  onBatchSaved: (batch: CardBatch, cards: Card[]) => Promise<any> | void;
   onUpdateProfiles?: (profiles: Profile[]) => void;
 }
 
@@ -244,6 +246,8 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isSavingBatch, setIsSavingBatch] = useState<boolean>(false);
+  const [batchSaveError, setBatchSaveError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
 
@@ -348,12 +352,64 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     }
   };
 
-  // Save batch into Inventory
-  const handleSaveToInventory = () => {
-    if (!previewBatchData.batch) return;
-    onBatchSaved(previewBatchData.batch, previewBatchData.cards);
-    setSuccessMessage(`تم حفظ الدفعة (${previewBatchData.batch.batchNumber}) بنجاح في المخزن العام بعدد ${quantity} كرت!`);
-    setTimeout(() => setSuccessMessage(null), 4500);
+  // Save batch into Inventory & Cloud Firestore with Pending status for MikroTik API sync
+  const handleSaveToInventory = async () => {
+    if (!previewBatchData.batch || isSavingBatch) return;
+    setIsSavingBatch(true);
+    setBatchSaveError(null);
+    setSuccessMessage(null);
+
+    try {
+      const activeRouterToken = tenant.settings?.syncToken || 'sam_sec_89df24a67e12c4';
+      const batchId = previewBatchData.batch.id;
+      const batchNumber = previewBatchData.batch.batchNumber;
+
+      // Transform cards to include required MikroTik sync properties:
+      // { username, password, profile: 'default', limitBytesTotal, limitUptime, comment }
+      const formattedCards = previewBatchData.cards.map(c => {
+        const uName = c.code;
+        const pwd = c.password || c.code;
+        const prof = selectedProfile?.name || c.profileName || 'default';
+        const bLimit = formatByteLimit(selectedProfile?.byteLimit || c.byteDisplay);
+        const uLimit = formatUptimeLimit(selectedProfile?.uptimeLimit || c.uptimeDisplay);
+        const comment = sanitizeRouterOSComment(`NetFlow_${batchNumber}_${c.price || 0}`);
+
+        return {
+          ...c,
+          username: uName,
+          password: pwd,
+          profile: prof,
+          limitBytesTotal: bLimit,
+          limitUptime: uLimit,
+          comment: comment
+        };
+      });
+
+      const batchToSave: CardBatch = {
+        ...previewBatchData.batch,
+        id: batchId,
+        batchId: batchId,
+        tenantId: tenant.id,
+        routerToken: activeRouterToken,
+        status: 'pending',
+        synced: false,
+        cards: formattedCards,
+        createdAt: new Date().toISOString()
+      };
+
+      // Call onBatchSaved and await the Promise to resolve completely before showing success
+      await onBatchSaved(batchToSave, previewBatchData.cards);
+
+      // Explicit success feedback ONLY after the Firestore write promise resolves
+      setSuccessMessage(`تم حفظ الدفعة (${batchNumber}) بعدد ${quantity} كرت بنجاح في قاعدة بيانات Firestore والمخزن العام! حالة الدفعة الآن: معلقة للمزامنة (Pending) وبانتظار سحبها عبر توكن المايكروتك.`);
+      setTimeout(() => setSuccessMessage(null), 7000);
+    } catch (err: any) {
+      console.error('Error saving batch to Firestore:', err);
+      setBatchSaveError(err?.message || 'فشل حفظ الدفعة في قاعدة البيانات السحابية. يرجى التأكد من الاتصال والمحاولة مجدداً.');
+      setTimeout(() => setBatchSaveError(null), 7000);
+    } finally {
+      setIsSavingBatch(false);
+    }
   };
 
   // Export CSV
@@ -459,10 +515,15 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             <button
               id="save-batch-btn"
               onClick={handleSaveToInventory}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-900/30 transition transform active:scale-95 text-sm"
+              disabled={isSavingBatch}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold shadow-lg shadow-emerald-900/30 transition transform active:scale-95 text-sm cursor-pointer disabled:cursor-not-allowed"
             >
-              <CheckCircle className="w-4 h-4" />
-              حفظ الدفعة في المخزن
+              {isSavingBatch ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
+              <span>{isSavingBatch ? 'جاري الحفظ في السحابة...' : 'حفظ الدفعة في المخزن'}</span>
             </button>
 
             <button
@@ -552,6 +613,14 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 style={{ width: `${Math.round((pdfProgress.current / pdfProgress.total) * 100)}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Batch Save Error Alert */}
+        {batchSaveError && (
+          <div className="mt-4 p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-rose-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{batchSaveError}</span>
           </div>
         )}
 

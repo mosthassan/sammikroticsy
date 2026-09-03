@@ -96,6 +96,11 @@ service cloud.firestore {
       }
     }
 
+    // دفعات الكروت العامة ومزامنة المايكروتك السحابية
+    match /batches/{batchId} {
+      allow read, write: if true;
+    }
+
     // صلاحيات ملفات المستخدمين المعزولة (Users)
     match /users/{userId} {
       allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAssignedAdmin());

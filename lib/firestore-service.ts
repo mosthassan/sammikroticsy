@@ -23,6 +23,7 @@ import {
   signOut,
   User 
 } from 'firebase/auth';
+import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from './routeros-utils';
 import { 
   Tenant, 
   Profile, 
@@ -456,19 +457,69 @@ export async function saveProfiles(tenantId: string, profiles: Profile[]): Promi
 export async function saveBatchAndCards(
   tenantId: string,
   cardBatch: CardBatch,
-  cards: Card[]
+  cards: Card[],
+  routerToken?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await ensureAuth();
 
-    // 1. Save batch document
-    const batchDocRef = doc(db, 'tenants', tenantId, 'batches', cardBatch.id);
-    await setDoc(batchDocRef, sanitizeForFirestore({
-      ...cardBatch,
-      updatedAt: new Date().toISOString()
-    }), { merge: true });
+    const activeToken = routerToken || cardBatch.routerToken || 'sam_sec_89df24a67e12c4';
+    const batchId = cardBatch.batchId || cardBatch.id;
+    const nowIso = new Date().toISOString();
 
-    // 2. Save cards in chunks of 450 (Firestore limit is 500 operations per batch)
+    // Prepare cards array formatted exactly for MikroTik sync:
+    // { username, password, profile: 'default', limitBytesTotal, limitUptime, comment }
+    const formattedCards = cards.map(card => {
+      const uName = card.code || card.id;
+      const pwd = card.password || card.code || '';
+      const prof = card.profileName || 'default';
+      const bLimit = formatByteLimit(card.byteLimit || card.byteDisplay);
+      const uLimit = formatUptimeLimit(card.uptimeLimit || card.uptimeDisplay);
+      const comment = sanitizeRouterOSComment(`NetFlow_${cardBatch.batchNumber || 'Batch'}_${card.price || 0}`);
+
+      return {
+        id: card.id,
+        username: uName,
+        password: pwd,
+        profile: prof,
+        limitBytesTotal: bLimit,
+        limitUptime: uLimit,
+        comment: comment,
+        code: card.code,
+        price: card.price,
+        wholesalePrice: card.wholesalePrice,
+        uptimeDisplay: card.uptimeDisplay,
+        byteDisplay: card.byteDisplay,
+        status: card.status || 'in_stock',
+        qrData: card.qrData || ''
+      };
+    });
+
+    const batchDocPayload = {
+      ...sanitizeForFirestore({
+        ...cardBatch,
+        id: batchId,
+        batchId: batchId,
+        tenantId: tenantId || cardBatch.tenantId || 'tenant_samtech_01',
+        routerToken: activeToken,
+        status: 'pending',
+        synced: false,
+        cards: formattedCards,
+        updatedAt: nowIso
+      }),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    // 1. Write batch document to the root 'batches' collection for high-speed MikroTik sync queries
+    const rootBatchRef = doc(db, 'batches', batchId);
+    await setDoc(rootBatchRef, batchDocPayload, { merge: true });
+
+    // 2. Also write to tenant subcollection for isolated tenant inventory and multi-tenancy
+    const tenantBatchRef = doc(db, 'tenants', tenantId, 'batches', batchId);
+    await setDoc(tenantBatchRef, batchDocPayload, { merge: true });
+
+    // 3. Save individual cards in chunks of 450
     const CHUNK_SIZE = 450;
     for (let i = 0; i < cards.length; i += CHUNK_SIZE) {
       const chunk = cards.slice(i, i + CHUNK_SIZE);
@@ -476,7 +527,12 @@ export async function saveBatchAndCards(
       
       for (const card of chunk) {
         const cardDocRef = doc(db, 'tenants', tenantId, 'cards', card.id);
-        writeChunk.set(cardDocRef, sanitizeForFirestore(card), { merge: true });
+        writeChunk.set(cardDocRef, sanitizeForFirestore({
+          ...card,
+          batchId: batchId,
+          syncedToRouter: false,
+          updatedAt: nowIso
+        }), { merge: true });
       }
 
       await writeChunk.commit();
@@ -569,9 +625,12 @@ export async function deleteBatchAndCards(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await ensureAuth();
-    // 1. Delete batch doc
+    // 1. Delete batch doc from tenant subcollection and root collection
     const batchRef = doc(db, 'tenants', tenantId, 'batches', batchId);
     await deleteDoc(batchRef);
+    try {
+      await deleteDoc(doc(db, 'batches', batchId));
+    } catch {}
 
     // 2. Find associated cards
     const cardsCol = collection(db, 'tenants', tenantId, 'cards');

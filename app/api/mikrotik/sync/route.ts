@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sanitizeRouterOSValue, sanitizeRouterOSIdentifier, sanitizeRouterOSComment } from '@/lib/routeros-utils';
+import { 
+  sanitizeRouterOSValue, 
+  sanitizeRouterOSIdentifier, 
+  sanitizeRouterOSComment,
+  formatByteLimit,
+  formatUptimeLimit
+} from '@/lib/routeros-utils';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore';
 
 // ==========================================================
 // In-Memory Rate Limiting & Anti-Brute-Force
@@ -44,64 +50,6 @@ function checkRateLimit(identifier: string): boolean {
 function isValidTokenFormat(token: string | null | undefined): boolean {
   if (!token || typeof token !== 'string') return false;
   return /^[a-zA-Z0-9_\-]{4,128}$/.test(token.trim());
-}
-
-// Format byte limits into clean numeric bytes for MikroTik RouterOS v7
-function formatByteLimit(raw: number | string | undefined | null): string {
-  if (raw === undefined || raw === null) return '0';
-  if (typeof raw === 'number') {
-    return isNaN(raw) || raw < 0 ? '0' : Math.floor(raw).toString();
-  }
-  const str = String(raw).trim();
-  if (/^\d+$/.test(str)) {
-    return str;
-  }
-  // Extract number and unit: e.g. "1GB", "2.5 GB", "500 MB", "1 جيجابايت", "1G"
-  const match = str.match(/([\d.]+)\s*([a-zA-Z\u0621-\u064A]+)?/);
-  if (match) {
-    const val = parseFloat(match[1]);
-    const unit = (match[2] || '').toLowerCase();
-    if (!isNaN(val)) {
-      if (unit.includes('g') || unit.includes('جيجا')) {
-        return Math.floor(val * 1024 * 1024 * 1024).toString();
-      }
-      if (unit.includes('m') || unit.includes('ميجا')) {
-        return Math.floor(val * 1024 * 1024).toString();
-      }
-      if (unit.includes('k') || unit.includes('كيلو')) {
-        return Math.floor(val * 1024).toString();
-      }
-      return Math.floor(val).toString();
-    }
-  }
-  return '0';
-}
-
-// Format uptime limits into clean RouterOS duration syntax (e.g. "24h", "1d", "6h", "0s")
-function formatUptimeLimit(raw: string | undefined | null): string {
-  if (!raw) return '0s';
-  const str = String(raw).trim().toLowerCase();
-  if (/^\d+[smhdw]$/.test(str)) {
-    return str;
-  }
-  const numMatch = str.match(/(\d+)/);
-  if (numMatch) {
-    const num = parseInt(numMatch[1], 10);
-    if (str.includes('ساع') || str.includes('hour') || str.includes('h')) {
-      return `${num}h`;
-    }
-    if (str.includes('يوم') || str.includes('day') || str.includes('d')) {
-      return `${num}d`;
-    }
-    if (str.includes('دقيق') || str.includes('min') || str.includes('m')) {
-      return `${num}m`;
-    }
-    if (str.includes('شهر') || str.includes('month')) {
-      return `${num * 30}d`;
-    }
-    return `${num}h`;
-  }
-  return '0s';
 }
 
 // Generate RouterOS v7 expired hotspot users cleanup routine
@@ -164,21 +112,34 @@ interface PendingCardItem {
   comment?: string;
 }
 
+interface MatchedBatch {
+  docId: string;
+  source: 'root_batches' | 'tenant_batches';
+  tenantId?: string;
+  batchId: string;
+  batchNumber: string;
+  cards: any[];
+}
+
 // Safely query pending batches and cards for a given token
 async function getPendingDataForToken(safeToken: string): Promise<{
   tenantId: string | null;
   pendingBatchIds: string[];
   pendingCards: PendingCardItem[];
+  matchedBatches: MatchedBatch[];
 }> {
   const result = {
     tenantId: KNOWN_TOKENS[safeToken] || null,
     pendingBatchIds: [] as string[],
-    pendingCards: [] as PendingCardItem[]
+    pendingCards: [] as PendingCardItem[],
+    matchedBatches: [] as MatchedBatch[]
   };
+
+  if (!db) return result;
 
   try {
     // 1. Find tenant document matching syncToken if not in known map
-    if (!result.tenantId && db) {
+    if (!result.tenantId) {
       try {
         const tenantsRef = collection(db, 'tenants');
         const tenantSnap = await getDocs(tenantsRef);
@@ -189,59 +150,136 @@ async function getPendingDataForToken(safeToken: string): Promise<{
           }
         });
       } catch (tErr) {
-        console.warn('Warning: Could not query tenants collection:', tErr);
+        console.warn('Tenant query note:', tErr);
       }
     }
 
-    if (!result.tenantId || !db) {
-      return result;
-    }
+    const matchedBatchesMap = new Map<string, MatchedBatch>();
 
-    const batchIdSet = new Set<string>();
-
-    // 2. Query cards for this tenant where syncedToRouter is false
+    // 2. Primary Query: Root 'batches' collection with exact criteria:
+    // where('status', '==', 'pending') and where('routerToken', '==', safeToken)
     try {
-      const cardsRef = collection(db, 'tenants', result.tenantId, 'cards');
-      const cardsSnap = await getDocs(cardsRef);
-      
-      cardsSnap.forEach((cDoc) => {
-        const card = cDoc.data();
-        if (card && card.syncedToRouter === false) {
-          result.pendingCards.push({
-            id: cDoc.id,
-            batchId: card.batchId,
-            batchNumber: card.batchNumber,
-            name: card.code || card.name,
-            password: card.password || card.code,
-            profile: card.profileName || 'default',
-            byteLimit: card.byteLimit || card.byteDisplay || '0',
-            uptimeLimit: card.uptimeLimit || card.uptimeDisplay || '0s',
-            comment: `NetFlow_${card.batchNumber || 'Card'}`
-          });
-          if (card.batchId) {
-            batchIdSet.add(card.batchId);
+      const batchesRef = collection(db, 'batches');
+      const q = query(
+        batchesRef,
+        where('status', '==', 'pending'),
+        where('routerToken', '==', safeToken)
+      );
+      const snap = await getDocs(q);
+      snap.forEach((d) => {
+        const data = d.data();
+        matchedBatchesMap.set(d.id, {
+          docId: d.id,
+          source: 'root_batches',
+          tenantId: data.tenantId || result.tenantId || undefined,
+          batchId: data.batchId || d.id,
+          batchNumber: data.batchNumber || 'Batch',
+          cards: Array.isArray(data.cards) ? data.cards : []
+        });
+      });
+    } catch (err) {
+      console.warn('Root batches exact query note (attempting fallback):', err);
+      try {
+        const batchesRef = collection(db, 'batches');
+        const qStatus = query(batchesRef, where('status', '==', 'pending'));
+        const snap = await getDocs(qStatus);
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data?.routerToken === safeToken) {
+            matchedBatchesMap.set(d.id, {
+              docId: d.id,
+              source: 'root_batches',
+              tenantId: data.tenantId || result.tenantId || undefined,
+              batchId: data.batchId || d.id,
+              batchNumber: data.batchNumber || 'Batch',
+              cards: Array.isArray(data.cards) ? data.cards : []
+            });
           }
-        }
-      });
-    } catch (cErr) {
-      console.warn('Warning: Could not query cards subcollection:', cErr);
+        });
+      } catch (fallbackErr) {
+        console.warn('Root batches fallback query note:', fallbackErr);
+      }
     }
 
-    // 3. Also check batches subcollection for any un-synced batches
-    try {
-      const batchesRef = collection(db, 'tenants', result.tenantId, 'batches');
-      const batchSnap = await getDocs(batchesRef);
-      batchSnap.forEach((bDoc) => {
-        const bData = bDoc.data();
-        if (bData && bData.status !== 'synced' && bData.status !== 'archived') {
-          batchIdSet.add(bDoc.id);
-        }
-      });
-    } catch (bErr) {
-      console.warn('Warning: Could not query batches subcollection:', bErr);
+    // 3. Also check tenant subcollection if tenantId is identified
+    if (result.tenantId) {
+      try {
+        const tBatchesRef = collection(db, 'tenants', result.tenantId, 'batches');
+        const qTenant = query(
+          tBatchesRef,
+          where('status', '==', 'pending')
+        );
+        const snap = await getDocs(qTenant);
+        snap.forEach((d) => {
+          const data = d.data();
+          if (!data.routerToken || data.routerToken === safeToken) {
+            if (!matchedBatchesMap.has(d.id)) {
+              matchedBatchesMap.set(d.id, {
+                docId: d.id,
+                source: 'tenant_batches',
+                tenantId: result.tenantId!,
+                batchId: data.batchId || d.id,
+                batchNumber: data.batchNumber || 'Batch',
+                cards: Array.isArray(data.cards) ? data.cards : []
+              });
+            }
+          }
+        });
+      } catch (tBatchErr) {
+        console.warn('Tenant batches subcollection query note:', tBatchErr);
+      }
     }
 
-    result.pendingBatchIds = Array.from(batchIdSet);
+    result.matchedBatches = Array.from(matchedBatchesMap.values());
+    result.pendingBatchIds = result.matchedBatches.map(b => b.batchId);
+
+    // 4. Extract cards from matched batches
+    for (const mb of result.matchedBatches) {
+      if (mb.cards && mb.cards.length > 0) {
+        for (const c of mb.cards) {
+          result.pendingCards.push({
+            id: c.id || `${mb.batchId}_${c.username || c.code}`,
+            batchId: mb.batchId,
+            batchNumber: mb.batchNumber,
+            name: c.username || c.code || c.name,
+            password: c.password || c.username || c.code,
+            profile: c.profile || c.profileName || 'default',
+            byteLimit: c.limitBytesTotal || c.byteLimit || '0',
+            uptimeLimit: c.limitUptime || c.uptimeLimit || '0s',
+            comment: c.comment || `NetFlow_${mb.batchNumber}`
+          });
+        }
+      }
+    }
+
+    // 5. Fallback: query tenant cards if cards were not embedded in the batch document
+    if (result.pendingCards.length === 0 && result.tenantId) {
+      try {
+        const cardsRef = collection(db, 'tenants', result.tenantId, 'cards');
+        const cardsSnap = await getDocs(cardsRef);
+        cardsSnap.forEach((cDoc) => {
+          const card = cDoc.data();
+          if (card && card.syncedToRouter === false) {
+            result.pendingCards.push({
+              id: cDoc.id,
+              batchId: card.batchId,
+              batchNumber: card.batchNumber,
+              name: card.code || card.name,
+              password: card.password || card.code,
+              profile: card.profileName || 'default',
+              byteLimit: card.byteLimit || card.byteDisplay || '0',
+              uptimeLimit: card.uptimeLimit || card.uptimeDisplay || '0s',
+              comment: `NetFlow_${card.batchNumber || 'Card'}`
+            });
+            if (card.batchId && !result.pendingBatchIds.includes(card.batchId)) {
+              result.pendingBatchIds.push(card.batchId);
+            }
+          }
+        });
+      } catch (cErr) {
+        console.warn('Cards fallback subcollection note:', cErr);
+      }
+    }
   } catch (err) {
     console.warn('getPendingDataForToken error:', err);
   }
@@ -251,38 +289,74 @@ async function getPendingDataForToken(safeToken: string): Promise<{
 
 // Safely update batch and card sync status in Firestore without throwing
 async function updateSyncStatusInDatabase(
-  tenantId: string,
-  batchIds: string[],
-  cardIds: string[]
+  tenantId: string | null,
+  matchedBatches: MatchedBatch[],
+  pendingBatchIds: string[],
+  cardDocIds: string[]
 ): Promise<void> {
   if (!db) return;
 
-  // 1. Update batches to 'synced'
-  for (const batchId of batchIds) {
+  const nowIso = new Date().toISOString();
+
+  // 1. Update matched batch documents status to 'synced' in root and tenant collections
+  for (const mb of matchedBatches) {
     try {
-      const bRef = doc(db, 'tenants', tenantId, 'batches', batchId);
+      const bRef = doc(db, 'batches', mb.docId);
       await updateDoc(bRef, {
         status: 'synced',
-        syncedAt: new Date().toISOString(),
-        lastSyncSource: 'router_poll'
+        synced: true,
+        syncedAt: nowIso,
+        lastSyncSource: 'mikrotik_api_get'
       });
     } catch (err) {
-      console.warn(`Could not update batch ${batchId} status gracefully:`, err);
+      console.warn(`Could not update root batch ${mb.docId} status:`, err);
+    }
+
+    const effectiveTenantId = mb.tenantId || tenantId;
+    if (effectiveTenantId) {
+      try {
+        const tRef = doc(db, 'tenants', effectiveTenantId, 'batches', mb.docId);
+        await updateDoc(tRef, {
+          status: 'synced',
+          synced: true,
+          syncedAt: nowIso,
+          lastSyncSource: 'mikrotik_api_get'
+        });
+      } catch (err) {
+        console.warn(`Could not update tenant batch ${mb.docId} status:`, err);
+      }
+    }
+  }
+
+  // Also update any pendingBatchIds if they were in tenant subcollection
+  if (tenantId) {
+    for (const bId of pendingBatchIds) {
+      if (!matchedBatches.some(mb => mb.docId === bId || mb.batchId === bId)) {
+        try {
+          const bRef = doc(db, 'tenants', tenantId, 'batches', bId);
+          await updateDoc(bRef, {
+            status: 'synced',
+            synced: true,
+            syncedAt: nowIso,
+            lastSyncSource: 'mikrotik_api_get'
+          });
+        } catch {}
+      }
     }
   }
 
   // 2. Update cards to syncedToRouter = true in chunks of 450
-  if (cardIds.length > 0) {
+  if (tenantId && cardDocIds.length > 0) {
     const CHUNK_SIZE = 450;
-    for (let i = 0; i < cardIds.length; i += CHUNK_SIZE) {
+    for (let i = 0; i < cardDocIds.length; i += CHUNK_SIZE) {
       try {
-        const chunk = cardIds.slice(i, i + CHUNK_SIZE);
+        const chunk = cardDocIds.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
         for (const cardId of chunk) {
           const cRef = doc(db, 'tenants', tenantId, 'cards', cardId);
           batch.update(cRef, {
             syncedToRouter: true,
-            syncedAt: new Date().toISOString()
+            syncedAt: nowIso
           });
         }
         await batch.commit();
@@ -392,7 +466,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 5. Query pending batches and cards from database
-    const { tenantId, pendingBatchIds, pendingCards } = await getPendingDataForToken(safeToken);
+    const { tenantId, pendingBatchIds, pendingCards, matchedBatches } = await getPendingDataForToken(safeToken);
 
     // 6. If no pending batches or cards exist for this router/token
     if (!pendingCards || pendingCards.length === 0) {
@@ -444,13 +518,11 @@ export async function GET(req: NextRequest) {
     });
 
     // 8. Gracefully update batch and card status in Firestore without crashing response on failure
-    if (tenantId) {
-      try {
-        const cardDocIds = pendingCards.map(c => c.id).filter(Boolean);
-        await updateSyncStatusInDatabase(tenantId, pendingBatchIds, cardDocIds);
-      } catch (dbUpdateErr) {
-        console.warn('Gracefully handled batch/card status update warning:', dbUpdateErr);
-      }
+    try {
+      const cardDocIds = pendingCards.map(c => c.id).filter(Boolean);
+      await updateSyncStatusInDatabase(tenantId, matchedBatches, pendingBatchIds, cardDocIds);
+    } catch (dbUpdateErr) {
+      console.warn('Gracefully handled batch/card status update warning:', dbUpdateErr);
     }
 
     // 9. Return JSON format if requested
