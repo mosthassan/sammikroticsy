@@ -243,7 +243,7 @@ export interface CardTemplate {
   fontSizeMeta: number;
   customHeader?: string;
   customFooter?: string;
-  themeStyle: 'modern_dark' | 'cyber_neon' | 'clean_white' | 'emerald_pro' | 'royal_gold' | 'sky_blue';
+  themeStyle: 'modern_dark' | 'cyber_neon' | 'clean_white' | 'emerald_pro' | 'royal_gold' | 'sky_blue' | 'stealth_carbon' | 'cosmic_violet' | 'geometric_prism' | 'sunset_coral' | 'executive_slate' | 'pure_cyan';
   marginX?: number;
   marginY?: number;
   borderRadius?: number;

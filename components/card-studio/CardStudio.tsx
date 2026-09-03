@@ -10,13 +10,17 @@ import { StudioControlPanel } from './StudioControlPanel';
 import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store';
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { saveTemplateToFirestore, loadTemplatesFromFirestore } from '@/lib/firestore-service';
+import { exportCardElementAsPng, exportTemplateBackgroundAsPng } from '@/lib/export-image';
 import {
   FileDown,
   Printer,
   CheckCircle,
   Eye,
   RefreshCw,
-  Move
+  Move,
+  Camera,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface CardStudioProps {
@@ -55,6 +59,10 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [isGeneratingAiTemplate, setIsGeneratingAiTemplate] = useState<boolean>(false);
   const [aiGenerationStep, setAiGenerationStep] = useState<string>('');
   const [aiError, setAiError] = useState<string | null>(null);
+
+  // Image Export State
+  const [isExportingImage, setIsExportingImage] = useState<boolean>(false);
+  const [showImageExportDropdown, setShowImageExportDropdown] = useState<boolean>(false);
 
   // Firestore Save Template State
   const [isSavingToFirestore, setIsSavingToFirestore] = useState<boolean>(false);
@@ -302,6 +310,44 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     window.print();
   };
 
+  // Export Card Sample as Image (PNG 300 DPI)
+  const handleExportCardAsImage = async () => {
+    setIsExportingImage(true);
+    setShowImageExportDropdown(false);
+    try {
+      const cleanName = (currentTemplate.name || 'Card').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_');
+      const success = await exportCardElementAsPng('main-card-preview-container', `NetFlow_${cleanName}_Card.png`, 3);
+      if (success) {
+        setSuccessMessage('تم حفظ الكرت كصورة عالية الدقة (300 DPI) على جهازك بنجاح!');
+        setTimeout(() => setSuccessMessage(null), 4000);
+      }
+    } catch (err) {
+      console.error('Failed to export card image:', err);
+      alert('حدث خطأ أثناء حفظ الصورة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
+  // Export Template Blank Background as Image (for print houses)
+  const handleExportBackgroundAsImage = async () => {
+    setIsExportingImage(true);
+    setShowImageExportDropdown(false);
+    try {
+      const cleanName = (currentTemplate.name || 'Template').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_');
+      const success = await exportTemplateBackgroundAsPng(currentTemplate, `NetFlow_${cleanName}_Blank_Background.png`);
+      if (success) {
+        setSuccessMessage('تم حفظ خلفية القالب كصورة فارغة للمطابع بدقة فائقة على جهازك بنجاح!');
+        setTimeout(() => setSuccessMessage(null), 4000);
+      }
+    } catch (err) {
+      console.error('Failed to export background image:', err);
+      alert('حدث خطأ أثناء حفظ خلفية القالب.');
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
   // Save batch into Inventory
   const handleSaveToInventory = () => {
     if (!previewBatchData.batch) return;
@@ -443,6 +489,53 @@ export const CardStudio: React.FC<CardStudioProps> = ({
               <Printer className="w-4 h-4 text-slate-300" />
               طباعة
             </button>
+
+            {/* Save As Image Dropdown */}
+            <div className="relative">
+              <button
+                id="save-image-dropdown-btn"
+                type="button"
+                onClick={() => setShowImageExportDropdown(!showImageExportDropdown)}
+                disabled={isExportingImage}
+                className="flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-950/40 transition transform active:scale-95 text-sm"
+                title="حفظ القالب أو الكرت كصورة عالية الدقة PNG على جهازك"
+              >
+                {isExportingImage ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <Camera className="w-4 h-4 text-indigo-200" />
+                )}
+                <span>حفظ كصورة 🖼️</span>
+              </button>
+
+              {showImageExportDropdown && (
+                <div className="absolute left-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl p-2 shadow-2xl z-50 animate-in fade-in space-y-1">
+                  <button
+                    type="button"
+                    onClick={handleExportCardAsImage}
+                    className="w-full p-2.5 rounded-xl hover:bg-slate-800 text-right flex items-center gap-2.5 transition text-xs text-slate-200 font-bold"
+                  >
+                    <Camera className="w-4 h-4 text-sky-400 shrink-0" />
+                    <div>
+                      <div>حفظ كرت العينة كصورة (PNG)</div>
+                      <div className="text-[10px] text-slate-400 font-normal">كرت كامل بالبيانات والكود 300 DPI</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportBackgroundAsImage}
+                    className="w-full p-2.5 rounded-xl hover:bg-slate-800 text-right flex items-center gap-2.5 transition text-xs text-slate-200 font-bold"
+                  >
+                    <ImageIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <div>حفظ خلفية القالب فارغة (PNG)</div>
+                      <div className="text-[10px] text-slate-400 font-normal">خلفية بدون بيانات مناسبة للمطابع</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -521,19 +614,22 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             handleCopyMikroTikScript={handleCopyMikroTikScript}
             handleDownloadRsc={handleDownloadRsc}
             handleExportCsv={handleExportCsv}
+            onExportCardImage={handleExportCardAsImage}
+            onExportBackgroundImage={handleExportBackgroundAsImage}
+            isExportingImage={isExportingImage}
           />
         </div>
 
         {/* Right Column: Live Interactive Preview (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
           {/* Preview Mode Switcher & Tools */}
-          <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-2.5 shadow-md">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-2.5 shadow-md">
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-sky-400" />
               <span className="text-sm font-bold text-white">المعاينة الحية للكروت</span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
               <button
                 type="button"
                 id="preview-a4-btn"
@@ -571,6 +667,24 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 <Move className="w-3.5 h-3.5" />
                 <span>استوديو السحب بالماوس 🖱️</span>
               </button>
+
+              <div className="h-4 w-px bg-slate-800 mx-0.5" />
+
+              <button
+                type="button"
+                id="preview-quick-export-img-btn"
+                onClick={handleExportCardAsImage}
+                disabled={isExportingImage}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-500/40 transition disabled:opacity-50"
+                title="تنزيل الكرت كصورة PNG عالية الدقة"
+              >
+                {isExportingImage ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>حفظ كصورة</span>
+              </button>
             </div>
           </div>
 
@@ -594,12 +708,15 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 </span>
               </div>
               {activeCards[0] && (
-                <CardPreview
-                  card={activeCards[0]}
-                  template={currentTemplate}
-                  tenant={tenant}
-                  isZoomed={true}
-                />
+                <div id="main-card-preview-container" className="flex justify-center w-full">
+                  <CardPreview
+                    id="main-card-preview-element"
+                    card={activeCards[0]}
+                    template={currentTemplate}
+                    tenant={tenant}
+                    isZoomed={true}
+                  />
+                </div>
               )}
             </div>
           ) : (
@@ -610,6 +727,22 @@ export const CardStudio: React.FC<CardStudioProps> = ({
               currentPage={currentPage}
               onPageChange={setCurrentPage}
             />
+          )}
+
+          {/* Offscreen element for reliable image export even when preview is in A4 or Designer mode */}
+          {activeCards[0] && (
+            <div
+              id="offscreen-card-export-target"
+              style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '380px', pointerEvents: 'none' }}
+              aria-hidden="true"
+            >
+              <CardPreview
+                card={activeCards[0]}
+                template={currentTemplate}
+                tenant={tenant}
+                isZoomed={true}
+              />
+            </div>
           )}
         </div>
       </div>

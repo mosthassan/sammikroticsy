@@ -13,6 +13,7 @@ interface CardPreviewProps {
   scale?: number;
   className?: string;
   isZoomed?: boolean;
+  id?: string;
 }
 
 export const CardPreview: React.FC<CardPreviewProps> = ({
@@ -21,7 +22,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   tenant,
   scale = 1,
   className = '',
-  isZoomed = false
+  isZoomed = false,
+  id
 }) => {
   const [qrUrl, setQrUrl] = useState<string>('');
 
@@ -131,7 +133,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
     return (
       <div
-        id={`card-${card.id}`}
+        id={id || `card-${card.id}`}
         style={{
           ...bgStyle,
           width: isZoomed ? '350px' : '100%',
@@ -604,7 +606,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
   return (
     <div
-      id={`card-${card.id}`}
+      id={id || `card-${card.id}`}
       style={{
         ...bgStyle,
         width: isZoomed ? '350px' : '100%',

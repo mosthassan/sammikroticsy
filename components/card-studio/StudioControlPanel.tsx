@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, CardTemplate, Profile, Tenant, CodeCharSet } from '@/types';
-import { PREBUILT_TEMPLATES_LIBRARY } from '@/lib/templates';
+import { PREBUILT_TEMPLATES_LIBRARY, COLOR_SCHEME_PRESETS, CARD_SHAPE_PRESETS, ColorSchemePreset } from '@/lib/templates';
 import { formatCurrency } from '@/lib/formatters';
 import { CARD_GRID_PRESETS, computeCardAutoScale } from '@/lib/utils';
 import { EditProfileModal } from '@/components/modals/EditProfileModal';
@@ -39,7 +39,12 @@ import {
   LayoutGrid,
   Tag,
   Box,
-  Paintbrush
+  Paintbrush,
+  Download,
+  Image as ImageIcon,
+  Camera,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -88,6 +93,9 @@ interface StudioControlPanelProps {
   handleCopyMikroTikScript: () => void;
   handleDownloadRsc: () => void;
   handleExportCsv: () => void;
+  onExportCardImage?: () => void;
+  onExportBackgroundImage?: () => void;
+  isExportingImage?: boolean;
 }
 
 export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
@@ -135,9 +143,14 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   copiedScript,
   handleCopyMikroTikScript,
   handleDownloadRsc,
-  handleExportCsv
+  handleExportCsv,
+  onExportCardImage,
+  onExportBackgroundImage,
+  isExportingImage = false
 }) => {
   const [activeTab, setActiveTab] = useState<'generator' | 'styling' | 'elements' | 'layout' | 'scripts'>('generator');
+  const [templateCategory, setTemplateCategory] = useState<'all' | 'dark' | 'luxury' | 'light' | 'vibrant'>('all');
+  const [showAiSection, setShowAiSection] = useState<boolean>(false);
 
   // Profile Edit & Create State in Studio
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState<boolean>(false);
@@ -153,6 +166,50 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
       }
     }
   };
+
+  const applyColorScheme = (preset: ColorSchemePreset) => {
+    handleUpdateTemplate({
+      bgColor: preset.bgColor,
+      bgGradientStart: preset.bgGradientStart,
+      bgGradientEnd: preset.bgGradientEnd,
+      bgType: 'gradient',
+      bgImage: undefined,
+      svgCode: undefined,
+      textColor: preset.textColor,
+      accentColor: preset.accentColor,
+      badgeBg: preset.badgeBg,
+      badgeTextColor: preset.badgeTextColor,
+      codeBoxBg: preset.codeBoxBg,
+      codeBoxBorderColor: preset.codeBoxBorderColor,
+      codeBoxTextColor: preset.codeBoxTextColor,
+      borderColor: preset.borderColor,
+      borderWidth: 1.5,
+      themeStyle: preset.id as any
+    });
+  };
+
+  const applyShapePreset = (radius: number) => {
+    handleUpdateTemplate({
+      borderRadius: radius
+    });
+  };
+
+  const filteredTemplates = PREBUILT_TEMPLATES_LIBRARY.filter(t => {
+    if (templateCategory === 'all') return true;
+    if (templateCategory === 'dark') {
+      return ['tpl_cyber_neon_svg', 'tpl_corporate_blue_svg', 'tpl_stealth_carbon_svg', 'tpl_executive_slate_svg'].includes(t.id);
+    }
+    if (templateCategory === 'luxury') {
+      return ['tpl_royal_gold_svg', 'tpl_cosmic_violet_svg'].includes(t.id);
+    }
+    if (templateCategory === 'light') {
+      return ['tpl_clean_minimal_svg'].includes(t.id);
+    }
+    if (templateCategory === 'vibrant') {
+      return ['tpl_sport_speed_svg', 'tpl_emerald_pro_svg', 'tpl_geometric_prism_svg', 'tpl_pure_cyan_svg', 'tpl_sunset_coral_svg'].includes(t.id);
+    }
+    return true;
+  });
 
   const AI_PROMPT_SUGGESTIONS = [
     { title: '🎮 نيون سايبربانك', prompt: 'قالب نيون سيبراني داكن لشبكة ألعاب وكافيهات مع موجات رقمية متوهجة' },
@@ -711,150 +768,165 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 2: STYLING & AI */}
+      {/* TAB 2: STYLING & TEMPLATES LIBRARY */}
       {activeTab === 'styling' && (
-        <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-lg space-y-5 animate-in fade-in duration-150">
+          {/* Header & Quick Action Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Palette className="w-5 h-5 text-amber-400" />
-              <h2 className="font-bold text-white text-base">تصميم وقوالب الكرت</h2>
-            </div>
-            <button
-              type="button"
-              id="save-template-firestore-btn"
-              onClick={handleSaveTemplateToFirestore}
-              disabled={isSavingToFirestore}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
-                isSavedInFirestore
-                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                  : 'bg-sky-600 hover:bg-sky-500 border-sky-500 text-white shadow-md'
-              }`}
-              title="حفظ القالب الحالي في Firestore"
-            >
-              {isSavingToFirestore ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>جاري الحفظ...</span>
-                </>
-              ) : isSavedInFirestore ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>محفوظ سحابياً</span>
-                </>
-              ) : (
-                <>
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>حفظ القالب سحابياً</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* AI Card Template Generator */}
-          <div className="bg-gradient-to-b from-indigo-950/40 via-purple-950/20 to-slate-950/80 border border-indigo-500/30 rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-inner">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-                <Sparkles className="w-4 h-4" />
-              </div>
               <div>
-                <h3 className="text-xs font-black text-slate-100 flex items-center gap-1.5">
-                  <span>توليد قوالب بالذكاء الاصطناعي</span>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    Gemini SVG
-                  </span>
-                </h3>
-                <p className="text-[10px] text-slate-400">
-                  اكتب فكرة القالب وسيقوم الذكاء الاصطناعي بإنشاء خلفية فيكتور عالية الدقة
-                </p>
+                <h2 className="font-bold text-white text-base">مكتبة القوالب وتخصيص المظهر</h2>
+                <p className="text-[11px] text-slate-400">تحكم يدوي كامل في شكل ولون وتصميم الكروت بدون تعقيد</p>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="relative">
-                <textarea
-                  id="ai-template-prompt-input"
-                  value={aiPrompt}
-                  onChange={e => setAiPrompt(e.target.value)}
-                  placeholder="مثال: قالب نيون داكن لشبكة كافيه مع تموجات ضوئية زرقاء وبنفسجية..."
-                  rows={2}
-                  className="w-full bg-slate-950 border border-indigo-500/40 focus:border-indigo-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none transition shadow-sm font-sans"
-                />
-              </div>
-
-              {/* Suggestions */}
-              <div className="flex flex-wrap gap-1.5">
-                {AI_PROMPT_SUGGESTIONS.map((item, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setAiPrompt(item.prompt)}
-                    className="px-2 py-1 rounded-lg bg-slate-950 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/50 text-[10px] text-slate-300 transition"
-                  >
-                    {item.title}
-                  </button>
-                ))}
-              </div>
-
-              {aiError && (
-                <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] flex items-center justify-between">
-                  <span>⚠️ {aiError}</span>
-                  <button type="button" onClick={() => setAiError(null)}>✕</button>
-                </div>
+            <div className="flex items-center gap-2">
+              {/* Export Image Dropdown / Direct Button */}
+              {onExportCardImage && (
+                <button
+                  type="button"
+                  id="quick-export-card-img-btn"
+                  onClick={onExportCardImage}
+                  disabled={isExportingImage}
+                  className="px-3 py-1.5 rounded-xl border border-sky-500/40 bg-sky-950/60 hover:bg-sky-900/60 text-sky-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                  title="حفظ الكرت الحالي كصورة عالية الدقة في جهازك"
+                >
+                  {isExportingImage ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5 text-sky-400" />
+                  )}
+                  <span>حفظ كصورة</span>
+                </button>
               )}
 
+              {/* Save Template to Firestore */}
               <button
                 type="button"
-                id="generate-ai-template-btn"
-                onClick={handleGenerateAiTemplate}
-                disabled={isGeneratingAiTemplate}
-                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 hover:from-indigo-500 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50"
+                id="save-template-firestore-btn"
+                onClick={handleSaveTemplateToFirestore}
+                disabled={isSavingToFirestore}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
+                  isSavedInFirestore
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                    : 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow-md'
+                }`}
+                title="حفظ القالب الحالي في Firestore"
               >
-                {isGeneratingAiTemplate ? (
+                {isSavingToFirestore ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{aiGenerationStep || 'جاري التوليد...'}</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>جاري الحفظ...</span>
+                  </>
+                ) : isSavedInFirestore ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>محفوظ سحابياً</span>
                   </>
                 ) : (
                   <>
-                    <Wand2 className="w-4 h-4 text-amber-300" />
-                    <span>توليد القالب بالذكاء الاصطناعي</span>
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>حفظ سحابي</span>
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Pre-built Templates */}
-          <div>
-            <label className="block text-xs font-bold text-slate-200 mb-2">
-              مكتبة القوالب الجاهزة (Pre-built Styles)
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {PREBUILT_TEMPLATES_LIBRARY.map(tpl => {
+          {/* 1. Pre-built Templates Library (12 Diverse High-Res Designs) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <LayoutGrid className="w-4 h-4 text-sky-400" />
+                <span>مكتبة القوالب الجاهزة ({PREBUILT_TEMPLATES_LIBRARY.length} قالباً متكاملاً)</span>
+              </label>
+              <span className="text-[10px] bg-sky-500/10 border border-sky-500/30 text-sky-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                SVG فيكتور 300DPI
+              </span>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {[
+                { id: 'all', label: 'الكل (12)', icon: '🌟' },
+                { id: 'dark', label: 'نيون وداكن', icon: '🟣' },
+                { id: 'luxury', label: 'ملكي VIP', icon: '👑' },
+                { id: 'vibrant', label: 'سرعة وتيربو', icon: '⚡' },
+                { id: 'light', label: 'موفر للحبر', icon: '⚪' }
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setTemplateCategory(cat.id as any)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap flex items-center gap-1 ${
+                    templateCategory === cat.id
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Templates Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+              {filteredTemplates.map(tpl => {
                 const isSelected = tpl.id === currentTemplate.id;
                 return (
                   <button
                     key={tpl.id}
                     type="button"
                     onClick={() => setSelectedTemplateId(tpl.id)}
-                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between h-20 relative overflow-hidden ${
+                    className={`p-2.5 rounded-xl border text-right transition flex flex-col justify-between h-24 relative overflow-hidden group ${
                       isSelected
-                        ? 'border-sky-400 bg-sky-950/50 ring-2 ring-sky-500/30'
-                        : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                        ? 'border-sky-400 bg-sky-950/60 ring-2 ring-sky-500/40 shadow-lg'
+                        : 'border-slate-800 bg-slate-950 hover:border-slate-700 hover:bg-slate-900/60'
                     }`}
                   >
-                    <div className="flex items-center justify-between relative z-10 w-full">
-                      <span className="text-[11px] font-bold text-slate-100 truncate">
-                        {tpl.name.split('(')[0]}
+                    {/* Top Row: Name and Checkmark */}
+                    <div className="flex items-center justify-between relative z-10 w-full gap-1">
+                      <span className="text-[11px] font-bold text-slate-100 truncate group-hover:text-sky-300">
+                        {tpl.name.replace(/\(.*?\)/, '').trim()}
                       </span>
-                      {isSelected && (
-                        <span className="w-4 h-4 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black">
+                      {isSelected ? (
+                        <span className="w-4 h-4 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black shrink-0">
                           ✓
                         </span>
+                      ) : (
+                        <div
+                          className="w-3.5 h-3.5 rounded-full border border-slate-700 shrink-0"
+                          style={{
+                            background: `linear-gradient(135deg, ${tpl.bgGradientStart || '#0f172a'}, ${tpl.bgGradientEnd || '#1e293b'})`
+                          }}
+                        />
                       )}
                     </div>
-                    <span className="text-[9px] text-slate-400 font-mono">
-                      {tpl.themeStyle === 'cyber_neon' ? 'نيون داكن 🟣' : tpl.themeStyle === 'clean_white' ? 'أبيض اقتصادي ⚪' : tpl.themeStyle === 'royal_gold' ? 'رياضي تيربو 🟠' : 'أزرق كلاسيكي 🔵'}
+
+                    {/* Middle: Color Swatch preview bar */}
+                    <div className="w-full h-2 rounded-full overflow-hidden flex border border-slate-800/80 my-1">
+                      <div className="flex-1" style={{ backgroundColor: tpl.bgGradientStart || tpl.bgColor || '#0f172a' }} />
+                      <div className="flex-1" style={{ backgroundColor: tpl.bgGradientEnd || '#1e293b' }} />
+                      <div className="w-2" style={{ backgroundColor: tpl.accentColor || '#38bdf8' }} />
+                      <div className="w-2" style={{ backgroundColor: tpl.badgeBg || '#f59e0b' }} />
+                    </div>
+
+                    {/* Bottom: Theme Badge */}
+                    <span className="text-[9.5px] text-slate-400 truncate">
+                      {tpl.themeStyle === 'cyber_neon' && 'نيون سيبراني 🟣'}
+                      {tpl.themeStyle === 'corporate_blue' && 'فايبر أزرق 🔵'}
+                      {tpl.themeStyle === 'royal_gold' && 'ذهب ملكي 👑'}
+                      {tpl.themeStyle === 'sport_speed' && 'تيربو ناري ⚡'}
+                      {tpl.themeStyle === 'clean_white' && 'أبيض اقتصادي ⚪'}
+                      {tpl.themeStyle === 'emerald_pro' && 'زمردي راقي 🟢'}
+                      {tpl.themeStyle === 'stealth_carbon' && 'كربون رياضي 🖤'}
+                      {tpl.themeStyle === 'cosmic_violet' && 'بنفسجي كوني ✨'}
+                      {tpl.themeStyle === 'geometric_prism' && 'موشور هندسي 📐'}
+                      {tpl.themeStyle === 'sunset_coral' && 'غروب مرجاني 🌅'}
+                      {tpl.themeStyle === 'executive_slate' && 'رمادي تنفيذي 🏢'}
+                      {tpl.themeStyle === 'pure_cyan' && 'سماوي فايبر 🌊'}
                     </span>
                   </button>
                 );
@@ -862,26 +934,381 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
             </div>
           </div>
 
-          {/* Custom Image Upload */}
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-slate-700/80 hover:border-slate-600 rounded-xl p-3 text-center cursor-pointer transition bg-slate-950/70 flex flex-col items-center justify-center gap-1.5"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <ImagePlus className="w-5 h-5 text-sky-400" />
-            <span className="text-xs font-semibold text-sky-400">
-              رفع صورة خلفية خاصة من جهازك
-            </span>
-            <span className="text-[10px] text-slate-500">يدعم PNG, JPG, WEBP بدقة عالية</span>
+          {/* 2. 1-Click Color Scheme Presets */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Paintbrush className="w-3.5 h-3.5 text-amber-400" />
+                <span>تدرجات وألوان متناسقة جاهزة بنقرة واحدة (1-Click Color Schemes)</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-sans">10 أنماط مجهزة</span>
+            </div>
+
+            <p className="text-[10.5px] text-slate-400">
+              اختر أي تشكيلة ألوان لتطبيقها فوراً على خلفية الكرت واللمسات وشارة السعر وصندوق الكود:
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
+              {COLOR_SCHEME_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyColorScheme(preset)}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-right transition flex items-center gap-2 group"
+                >
+                  <div
+                    className="w-4 h-4 rounded-full shrink-0 border border-white/20 shadow-sm"
+                    style={{
+                      background: `linear-gradient(135deg, ${preset.bgGradientStart}, ${preset.bgGradientEnd})`
+                    }}
+                  />
+                  <span className="text-[10px] font-bold text-slate-300 group-hover:text-white truncate">
+                    {preset.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Card Shape & Border Radius Controls */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Box className="w-3.5 h-3.5 text-sky-400" />
+                <span>شكل واستدارة زوايا الكرت (Corner Radius & Border)</span>
+              </label>
+              <span className="text-[10px] font-mono text-sky-400 bg-sky-950/60 border border-sky-800 px-2 py-0.5 rounded">
+                {currentTemplate.borderRadius ?? 14}px
+              </span>
+            </div>
+
+            {/* Quick Shape Presets */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: 'مربع حاد', radius: 0, desc: '0px' },
+                { label: 'كلاسيكي', radius: 8, desc: '8px' },
+                { label: 'عصري دائري', radius: 14, desc: '14px' },
+                { label: 'كبسولة ناعمة', radius: 24, desc: '24px' }
+              ].map((s) => (
+                <button
+                  key={s.radius}
+                  type="button"
+                  onClick={() => applyShapePreset(s.radius)}
+                  className={`py-1.5 px-2 rounded-lg border text-center transition flex flex-col items-center ${
+                    (currentTemplate.borderRadius ?? 14) === s.radius
+                      ? 'bg-sky-600/30 border-sky-500 text-sky-200 font-bold ring-1 ring-sky-500/40'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold">{s.label}</span>
+                  <span className="text-[9px] text-slate-500">{s.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Slider for exact corner radius */}
+            <div className="space-y-1 pt-1 border-t border-slate-800/80">
+              <div className="flex justify-between text-[10px] text-slate-400">
+                <span>تعديل يدوي دقيق لاستدارة الحواف:</span>
+                <span className="font-mono">{currentTemplate.borderRadius ?? 14} px</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="32"
+                step="1"
+                value={currentTemplate.borderRadius ?? 14}
+                onChange={e => handleUpdateTemplate({ borderRadius: parseInt(e.target.value) })}
+                className="w-full accent-sky-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Border Width & Color */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+              <div>
+                <label className="block text-[10.5px] text-slate-400 mb-1">سمك إطار الكرت الخارجي</label>
+                <select
+                  value={currentTemplate.borderWidth ?? 1}
+                  onChange={e => handleUpdateTemplate({ borderWidth: parseFloat(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200"
+                >
+                  <option value={0}>بدون إطار (0px)</option>
+                  <option value={1}>إطار دقيق (1px)</option>
+                  <option value={1.5}>إطار متناسق (1.5px)</option>
+                  <option value={2}>إطار بارز (2px)</option>
+                  <option value={3}>إطار سميك (3px)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10.5px] text-slate-400 mb-1">لون إطار الكرت</label>
+                <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                  <input
+                    type="color"
+                    value={currentTemplate.borderColor || '#38bdf8'}
+                    onChange={e => handleUpdateTemplate({ borderColor: e.target.value })}
+                    className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-slate-300 truncate">
+                    {currentTemplate.borderColor || '#38bdf8'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Manual Background & Colors Customizer */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                <span>تخصيص ألوان الخلفية والنصوص يدوياً (Manual Palette)</span>
+              </label>
+              <span className="text-[10px] text-slate-400">تعديل مباشر</span>
+            </div>
+
+            {/* Background Type Toggle */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { id: 'gradient', label: 'تدرج لوني' },
+                { id: 'solid', label: 'لون موحد' },
+                { id: 'image', label: 'صورة خاصة' }
+              ].map((bg) => (
+                <button
+                  key={bg.id}
+                  type="button"
+                  onClick={() => handleUpdateTemplate({ bgType: bg.id as any })}
+                  className={`py-1.5 px-2 rounded-lg border text-center text-[11px] font-bold transition ${
+                    (currentTemplate.bgType || 'gradient') === bg.id
+                      ? 'bg-emerald-600/30 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/40'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {bg.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Colors Pickers Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-1">لون بداية التدرج</label>
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                  <input
+                    type="color"
+                    value={currentTemplate.bgGradientStart || currentTemplate.bgColor || '#0f172a'}
+                    onChange={e => handleUpdateTemplate({ bgGradientStart: e.target.value })}
+                    className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-slate-300 truncate">
+                    {currentTemplate.bgGradientStart || '#0f172a'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-1">لون نهاية التدرج</label>
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                  <input
+                    type="color"
+                    value={currentTemplate.bgGradientEnd || '#1e293b'}
+                    onChange={e => handleUpdateTemplate({ bgGradientEnd: e.target.value })}
+                    className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-slate-300 truncate">
+                    {currentTemplate.bgGradientEnd || '#1e293b'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-1">لون اللمسات (Accent)</label>
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                  <input
+                    type="color"
+                    value={currentTemplate.accentColor || '#38bdf8'}
+                    onChange={e => handleUpdateTemplate({ accentColor: e.target.value })}
+                    className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-slate-300 truncate">
+                    {currentTemplate.accentColor || '#38bdf8'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 mb-1">لون النص الرئيسي</label>
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                  <input
+                    type="color"
+                    value={currentTemplate.textColor || '#ffffff'}
+                    onChange={e => handleUpdateTemplate({ textColor: e.target.value })}
+                    className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                  <span className="text-[10px] font-mono text-slate-300 truncate">
+                    {currentTemplate.textColor || '#ffffff'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Image Upload if selected or for custom branding */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-slate-700/80 hover:border-slate-600 rounded-xl p-3 text-center cursor-pointer transition bg-slate-950/70 flex flex-col items-center justify-center gap-1"
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <ImagePlus className="w-5 h-5 text-sky-400" />
+              <span className="text-xs font-semibold text-sky-400">
+                رفع صورة خلفية مخصصة من جهازك (PNG / JPG / SVG)
+              </span>
+              <span className="text-[10px] text-slate-500">يمكنك استخدام تصاميمك المصممة بالفوتوشوب أو الإلستريتور كخلفية</span>
+            </div>
+          </div>
+
+          {/* 5. Save Template as Image on Device */}
+          <div className="bg-gradient-to-r from-sky-950/50 via-slate-950 to-indigo-950/50 border border-sky-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-sky-400" />
+                <h3 className="text-xs font-bold text-white">حفظ وتصدير القالب كصورة في الجهاز (PNG)</h3>
+              </div>
+              <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded font-mono font-bold">
+                300 DPI عالية الدقة
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-300">
+              يمكنك تصدير كرت العينة الحالي أو خلفية القالب كاملة كصورة PNG بدون تشويش لاستخدامها في المطابع أو مشاركتها:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                id="export-card-sample-img-btn"
+                onClick={onExportCardImage}
+                disabled={isExportingImage || !onExportCardImage}
+                className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2"
+              >
+                {isExportingImage ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span>حفظ كرت العينة كصورة (PNG)</span>
+              </button>
+
+              <button
+                type="button"
+                id="export-bg-blank-img-btn"
+                onClick={onExportBackgroundImage}
+                disabled={isExportingImage || !onExportBackgroundImage}
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 hover:border-slate-600 text-xs font-bold transition flex items-center justify-center gap-2"
+              >
+                {isExportingImage ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-amber-400" />
+                )}
+                <span>حفظ خلفية القالب فارغة (للمطابع)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 6. AI Generator (Optional Secondary Tool) */}
+          <div className="bg-slate-950/60 border border-indigo-500/20 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              id="toggle-ai-section-btn"
+              onClick={() => setShowAiSection(!showAiSection)}
+              className="w-full p-3 flex items-center justify-between text-right hover:bg-indigo-950/20 transition"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <span>توليد بالذكاء الاصطناعي (أداة مساعدة إضافية)</span>
+                    <span className="text-[9px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/20">
+                      اختياري
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-slate-400">
+                    لست ملزماً باستخدامه، يمكنك الاعتماد كلياً على مكتبة القوالب والألوان أعلاه
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-slate-400">
+                {showAiSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
+
+            {showAiSection && (
+              <div className="p-4 pt-0 space-y-3 border-t border-slate-800/80 mt-2">
+                <div className="relative pt-2">
+                  <textarea
+                    id="ai-template-prompt-input"
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    placeholder="اكتب فكرتك للقالب، مثلاً: كرت نيون سيبراني بنفسجي وأزرق متوهج لشبكة كافيهات..."
+                    rows={2}
+                    className="w-full bg-slate-900 border border-indigo-500/30 focus:border-indigo-400 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none transition shadow-sm font-sans"
+                  />
+                </div>
+
+                {/* Suggestions */}
+                <div className="flex flex-wrap gap-1.5">
+                  {AI_PROMPT_SUGGESTIONS.map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setAiPrompt(item.prompt)}
+                      className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-500/40 text-[10px] text-slate-300 transition"
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+
+                {aiError && (
+                  <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] flex items-center justify-between">
+                    <span>⚠️ {aiError}</span>
+                    <button type="button" onClick={() => setAiError(null)}>✕</button>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  id="generate-ai-template-btn"
+                  onClick={handleGenerateAiTemplate}
+                  disabled={isGeneratingAiTemplate}
+                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isGeneratingAiTemplate ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{aiGenerationStep || 'جاري التوليد...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4 text-amber-300" />
+                      <span>توليد القالب بالذكاء الاصطناعي</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
