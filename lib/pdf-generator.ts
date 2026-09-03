@@ -214,7 +214,7 @@ export async function generateCardsPdf(
   cards: Card[],
   template: CardTemplate,
   tenant: Tenant,
-  onProgress?: (percent: number) => void
+  onProgress?: (current: number, total: number) => void
 ): Promise<Blob> {
   // A4 Standard Dimensions in mm
   const pageWidthMm = 210;
@@ -916,7 +916,7 @@ export async function generateCardsPdf(
     pdf.addImage(pageDataUrl, 'JPEG', 0, 0, pageWidthMm, pageHeightMm, undefined, 'FAST');
 
     if (onProgress) {
-      onProgress(Math.round(((pageIdx + 1) / totalPages) * 100));
+      onProgress(pageIdx + 1, totalPages);
     }
     await new Promise((r) => setTimeout(r, 0));
   }

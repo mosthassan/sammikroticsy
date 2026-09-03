@@ -32,6 +32,7 @@ import {
   UploadCloud,
   Pencil,
   Plus,
+  Minus,
   Calendar,
   Maximize2,
   Ruler,
@@ -396,44 +397,181 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
             </div>
           </div>
 
-          {/* Quantity Selector */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-slate-300">
-                عدد الكروت المطلوب توليدها
+          {/* Quantity Selector with Custom Number Input Box up to 5000+ */}
+          <div className="bg-slate-950/95 border-2 border-sky-500/50 rounded-2xl p-4 shadow-xl space-y-3.5">
+            {/* Header & A4 Page Count Badge */}
+            <div className="flex items-center justify-between">
+              <label htmlFor="custom-quantity-input" className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-sky-400" />
+                <span>عدد الكروت المطلوب توليدها:</span>
               </label>
-              <span className="text-xs font-mono font-bold text-sky-400">
-                {quantity} كرت ({Math.ceil(quantity / ((currentTemplate.cardsPerRow || 3) * (currentTemplate.cardsPerCol || 8)))} ورقة A4)
-              </span>
+              <div className="text-left">
+                <span className="text-xs font-mono font-bold text-sky-300 bg-sky-950 px-2.5 py-1 rounded-lg border border-sky-500/40">
+                  {quantity.toLocaleString('en-US')} كرت • {Math.ceil(quantity / ((currentTemplate.cardsPerRow || 3) * (currentTemplate.cardsPerCol || 8)))} ورقة A4
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-5 gap-1.5 mb-2">
-              {[24, 48, 72, 96, 120].map(qty => (
-                <button
-                  key={qty}
-                  type="button"
-                  onClick={() => setQuantity(qty)}
-                  className={`py-1.5 text-xs font-bold rounded-lg border transition ${
-                    quantity === qty
-                      ? 'bg-sky-600 text-white border-sky-500'
-                      : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                  }`}
-                >
-                  {qty}
-                </button>
-              ))}
+            {/* Direct Input Field for Custom Number + Stepper Buttons */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                <span>✏️ اكتب العدد المطلوب مباشرة (مثال: 500، 1000، 5000):</span>
+                <span className="text-[10px] text-slate-400 font-mono">مرونة من 1 حتى 10,000 كرت</span>
+              </div>
+              
+              <div className="bg-slate-900 border-2 border-sky-500/70 focus-within:border-sky-400 rounded-xl p-2 flex items-center gap-2 shadow-inner transition">
+                <div className="relative flex-1">
+                  <input
+                    id="custom-quantity-input"
+                    type="number"
+                    min={1}
+                    max={10000}
+                    step={1}
+                    value={quantity}
+                    onChange={e => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1) {
+                        setQuantity(Math.min(10000, val));
+                      } else if (e.target.value === '') {
+                        setQuantity(1);
+                      }
+                    }}
+                    className="w-full bg-transparent border-0 text-center font-mono font-black text-2xl text-sky-300 focus:outline-none focus:ring-0"
+                    placeholder="5000"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                    كرت
+                  </span>
+                </div>
+
+                {/* Stepper Buttons for Instant Adjustments */}
+                <div className="flex items-center gap-1 border-r border-slate-700/80 pr-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.max(1, prev - 24))}
+                    className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 rounded-lg text-xs font-bold border border-slate-700 transition"
+                    title="إنقاص ورقة A4 كاملة (24 كرت)"
+                  >
+                    -24
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.min(10000, prev + 24))}
+                    className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 rounded-lg text-xs font-bold border border-slate-700 transition"
+                    title="إضافة ورقة A4 كاملة (24 كرت)"
+                  >
+                    +24
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.min(10000, prev + 100))}
+                    className="px-2 py-1.5 bg-sky-950 hover:bg-sky-900 active:bg-sky-800 text-sky-300 rounded-lg text-xs font-bold border border-sky-700 transition"
+                    title="إضافة 100 كرت"
+                  >
+                    +100
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.min(10000, prev + 500))}
+                    className="px-2 py-1.5 bg-sky-950 hover:bg-sky-900 active:bg-sky-800 text-sky-300 rounded-lg text-xs font-bold border border-sky-700 transition"
+                    title="إضافة 500 كرت"
+                  >
+                    +500
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <input
-              id="quantity-slider"
-              type="range"
-              min={1}
-              max={240}
-              step={1}
-              value={quantity}
-              onChange={e => setQuantity(parseInt(e.target.value) || 24)}
-              className="w-full accent-sky-500 cursor-pointer"
-            />
+            {/* Quick Presets: Standard & Commercial (Large Batches) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span className="font-semibold text-slate-300">أزرار سريعة للأعداد الشائعة:</span>
+              </div>
+
+              {/* Row 1: Standard A4 Sheet Presets (24 - 120 cards) */}
+              <div className="grid grid-cols-5 gap-1.5">
+                {[24, 48, 72, 96, 120].map(qty => (
+                  <button
+                    key={qty}
+                    type="button"
+                    onClick={() => setQuantity(qty)}
+                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
+                      quantity === qty
+                        ? 'bg-sky-600 text-white border-sky-500 shadow-md ring-1 ring-sky-400'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    {qty}
+                  </button>
+                ))}
+              </div>
+
+              {/* Row 2: Large Commercial Quantities (240 to 5000 cards) */}
+              <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                {[240, 500, 1000, 2500, 5000].map(qty => (
+                  <button
+                    key={qty}
+                    type="button"
+                    onClick={() => setQuantity(qty)}
+                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
+                      quantity === qty
+                        ? 'bg-amber-600 text-white border-amber-500 shadow-md ring-1 ring-amber-400'
+                        : 'bg-slate-900 text-amber-300/90 border-amber-500/30 hover:border-amber-400 hover:bg-amber-950/40 hover:text-amber-200'
+                    }`}
+                  >
+                    {qty >= 1000 ? `${qty.toLocaleString('en-US')}` : `${qty}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Range Slider - Scaled smoothly up to 5000 */}
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                <span>1 كرت</span>
+                <span>2,500 كرت</span>
+                <span>5,000 كرت</span>
+              </div>
+              <input
+                id="quantity-slider"
+                type="range"
+                min={1}
+                max={5000}
+                step={1}
+                value={Math.min(5000, quantity)}
+                onChange={e => setQuantity(parseInt(e.target.value) || 24)}
+                className="w-full accent-sky-500 cursor-pointer"
+              />
+            </div>
+
+            {/* Profile Financial Estimates for the chosen quantity */}
+            {selectedProfile && (
+              <div className="p-2 bg-slate-900/90 border border-slate-800 rounded-xl text-[11px] flex flex-wrap items-center justify-between gap-1 text-slate-300">
+                <span className="text-slate-400 font-medium">تقدير مالي للدفعة:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-bold font-mono">
+                    تجزئة: {formatCurrency(quantity * selectedProfile.price, tenant.currency)}
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-amber-400 font-bold font-mono">
+                    جملة: {formatCurrency(quantity * selectedProfile.wholesalePrice, tenant.currency)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* High Volume Commercial Notice */}
+            {quantity >= 500 && (
+              <div className="p-2.5 bg-amber-950/50 border border-amber-500/40 rounded-xl text-[11px] text-amber-200 flex items-start gap-2">
+                <span className="text-amber-400 text-sm mt-0.5">⚡</span>
+                <div className="space-y-0.5">
+                  <span className="font-bold">كمية ضخمة للشبكات ({quantity.toLocaleString('en-US')} كرت):</span>
+                  <p className="text-amber-300/80 text-[10px] leading-relaxed">
+                    جاهزة لتوليد سكريبت مايكروتك كامل بضغطة زر وتخزينها في المخزن العام فوراً. لطباعة PDF ستحتاج إلى {Math.ceil(quantity / ((currentTemplate.cardsPerRow || 3) * (currentTemplate.cardsPerCol || 8)))} ورقة A4.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Code Character Set Options */}

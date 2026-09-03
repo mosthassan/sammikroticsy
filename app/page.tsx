@@ -30,24 +30,35 @@ import {
   TeamMember,
   UserProfile
 } from '@/types';
+import dynamic from 'next/dynamic';
 import { Navigation } from '@/components/layout/Navigation';
 import { DashboardOverview } from '@/components/dashboard/DashboardOverview';
-import { CardStudio } from '@/components/card-studio/CardStudio';
-import { HotspotStudio } from '@/components/hotspot/HotspotStudio';
 import { InventoryManager } from '@/components/inventory/InventoryManager';
 import { PosManager } from '@/components/pos/PosManager';
 import { InvoicesManager } from '@/components/invoices/InvoicesManager';
-import { MikroTikBridge } from '@/components/mikrotik/MikroTikBridge';
 import { SettingsManager } from '@/components/settings/SettingsManager';
-import { NewInvoiceModal } from '@/components/modals/NewInvoiceModal';
-import { NewPaymentModal } from '@/components/modals/NewPaymentModal';
-import { AuthModal } from '@/components/auth/AuthModal';
 import { PublicLandingPage } from '@/components/auth/PublicLandingPage';
-import { DistributorFieldView } from '@/components/distributor/DistributorFieldView';
-import { SuperAdminDashboard } from '@/components/admin/SuperAdminDashboard';
-import { OnboardingWizard } from '@/components/settings/OnboardingWizard';
-import { CleanTenantDataModal } from '@/components/settings/CleanTenantDataModal';
-import { SubscriptionPlansModal } from '@/components/modals/SubscriptionPlansModal';
+
+// Dynamically import heavy tabs and modals to optimize initial bundle and avoid chunk load timeout
+const CardStudio = dynamic(() => import('@/components/card-studio/CardStudio').then(m => m.CardStudio), {
+  loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل استوديو تصميم الكروت...</div>
+});
+const HotspotStudio = dynamic(() => import('@/components/hotspot/HotspotStudio').then(m => m.HotspotStudio), {
+  loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل استوديو صفحات الهوتسبوت...</div>
+});
+const MikroTikBridge = dynamic(() => import('@/components/mikrotik/MikroTikBridge').then(m => m.MikroTikBridge), {
+  loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل منصة ربط ميكروتك...</div>
+});
+const SuperAdminDashboard = dynamic(() => import('@/components/admin/SuperAdminDashboard').then(m => m.SuperAdminDashboard), {
+  loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل لوحة تحكم الإدارة العليا...</div>
+});
+const DistributorFieldView = dynamic(() => import('@/components/distributor/DistributorFieldView').then(m => m.DistributorFieldView));
+const NewInvoiceModal = dynamic(() => import('@/components/modals/NewInvoiceModal').then(m => m.NewInvoiceModal));
+const NewPaymentModal = dynamic(() => import('@/components/modals/NewPaymentModal').then(m => m.NewPaymentModal));
+const AuthModal = dynamic(() => import('@/components/auth/AuthModal').then(m => m.AuthModal));
+const OnboardingWizard = dynamic(() => import('@/components/settings/OnboardingWizard').then(m => m.OnboardingWizard));
+const CleanTenantDataModal = dynamic(() => import('@/components/settings/CleanTenantDataModal').then(m => m.CleanTenantDataModal));
+const SubscriptionPlansModal = dynamic(() => import('@/components/modals/SubscriptionPlansModal').then(m => m.SubscriptionPlansModal));
 import {
   fetchAllTenants,
   signOutUser,
