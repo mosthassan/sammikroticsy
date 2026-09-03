@@ -508,6 +508,7 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
           {template.showCode && (() => {
             const p = getPos('code');
             const isSelected = selectedElement === 'code';
+            const codeStyle = template.codeBoxStyle || 'modern_box';
             return (
               <div
                 onMouseDown={e => handleMouseDown(e, 'code')}
@@ -517,13 +518,29 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   top: `${p.y}%`,
                   fontSize: `${p.fontSize || 14}px`
                 }}
-                className={`cursor-move rounded-xl px-4 py-1.5 font-mono font-bold tracking-wider shadow-inner text-center flex items-center justify-center gap-1 transition ${
+                dir="ltr"
+                className={`cursor-move rounded-xl px-3 py-1 font-mono font-bold tracking-wider shadow-inner text-center flex items-center justify-center gap-1 transition ${
                   isDark
                     ? 'bg-slate-900/90 text-sky-300 border border-sky-500/50'
                     : 'bg-slate-100 text-slate-900 border border-slate-300'
                 } ${isSelected ? 'ring-2 ring-emerald-400 scale-105 z-30 shadow-xl' : 'hover:ring-1 hover:ring-sky-400/50'}`}
               >
-                <span>{card.code}</span>
+                {codeStyle === 'split_pin' ? (
+                  <div className="flex items-center justify-center gap-0.5" dir="ltr">
+                    {card.code.split('').map((ch, idx) => (
+                      <div
+                        key={idx}
+                        className={`w-4 h-5 rounded border text-xs font-mono font-bold flex items-center justify-center ${
+                          isDark ? 'bg-slate-800 border-sky-500/60 text-sky-200' : 'bg-white border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        {ch}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span>{card.code}</span>
+                )}
                 {template.showScratchGuide && (
                   <span className="text-[8px] text-amber-400 font-sans mr-1 flex items-center gap-0.5">
                     <Sparkles className="w-2.5 h-2.5" /> (خدش)

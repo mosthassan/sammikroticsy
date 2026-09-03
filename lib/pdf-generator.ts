@@ -125,6 +125,34 @@ function drawStyledCodeBox(
   const boxText = textColor || (isDarkCard ? '#ffffff' : '#020617');
 
   ctx.save();
+  if (style === 'split_pin') {
+    const chars = code.split('');
+    const charCount = Math.max(1, chars.length);
+    const gap = 1.0 * dpiScale * autoScale;
+    const totalGaps = (charCount - 1) * gap;
+    const boxW = Math.min(h * 0.9, (w - totalGaps) / charCount);
+    const totalW = charCount * boxW + totalGaps;
+    const startX = x + (w - totalW) / 2;
+    const fontSize = Math.round(Math.max(3.0, 3.8 * autoScale) * dpiScale);
+    ctx.font = `900 ${fontSize}px 'Courier New', monospace, ${fontStack}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < charCount; i++) {
+      const bx = startX + i * (boxW + gap);
+      ctx.fillStyle = boxBg;
+      drawRoundedRect(ctx, bx, y, boxW, h, 1.5 * dpiScale, true, false);
+      ctx.strokeStyle = boxBorder;
+      ctx.lineWidth = 1.4;
+      drawRoundedRect(ctx, bx, y, boxW, h, 1.5 * dpiScale, false, true);
+
+      ctx.fillStyle = boxText;
+      ctx.fillText(chars[i], bx + boxW / 2, y + h / 2);
+    }
+    ctx.restore();
+    return;
+  }
+
   const radius = style === 'pill_badge' ? h / 2 : 2.5 * dpiScale;
 
   if (style === 'ticket_dashed') {
@@ -548,19 +576,22 @@ export async function generateCardsPdf(
           const posX = cardX + cardW - ((p.x ?? 40) / 100) * cardW - codeW;
           const posY = cardY + ((p.y ?? 44) / 100) * cardH;
 
-          ctx.save();
-          ctx.fillStyle = isDarkCard ? '#090e1f' : '#f8fafc';
-          drawRoundedRect(ctx, posX, posY, codeW, codeH, 2.5 * dpiScale, true, false);
-          ctx.strokeStyle = isDarkCard ? '#38bdf8' : '#0284c7';
-          ctx.lineWidth = 1.75;
-          drawRoundedRect(ctx, posX, posY, codeW, codeH, 2.5 * dpiScale, false, true);
-
-          ctx.fillStyle = isDarkCard ? '#ffffff' : '#020617';
-          ctx.font = `900 ${Math.round(Math.max(3.6, (p.fontSize || 13) * 0.38) * dpiScale * autoScale)}px 'Courier New', monospace, ${fontStack}`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(card.code, posX + codeW / 2, posY + codeH / 2);
-          ctx.restore();
+          drawStyledCodeBox(
+            ctx,
+            posX,
+            posY,
+            codeW,
+            codeH,
+            template.codeBoxStyle,
+            template.codeBoxBg,
+            template.codeBoxBorderColor,
+            template.codeBoxTextColor,
+            card.code,
+            isDarkCard,
+            dpiScale,
+            autoScale,
+            fontStack
+          );
 
           if (template.showScratchGuide) {
             ctx.save();

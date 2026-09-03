@@ -337,9 +337,29 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 ...extraStyle,
                 fontSize: `${(p.fontSize || 13) * autoScale}px`
               }}
+              dir="ltr"
               className={`px-2.5 py-0.5 font-mono font-bold tracking-wider text-center flex items-center justify-center gap-1 z-10 ${shapeClasses}`}
             >
-              <span>{card.code}</span>
+              {codeStyle === 'split_pin' ? (
+                <div className="flex items-center justify-center gap-0.5 py-0.5" dir="ltr">
+                  {card.code.split('').map((ch, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        fontSize: `${Math.round((p.fontSize || 13) * 0.9 * autoScale)}px`,
+                        backgroundColor: template.codeBoxBg || (isDarkCard ? '#090e1f' : '#f8fafc'),
+                        borderColor: template.codeBoxBorderColor || (isDarkCard ? '#38bdf8' : '#0284c7'),
+                        color: template.codeBoxTextColor || (isDarkCard ? '#ffffff' : '#020617')
+                      }}
+                      className="w-4 h-5 rounded border font-mono font-black flex items-center justify-center shadow-inner"
+                    >
+                      {ch}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span>{card.code}</span>
+              )}
               {template.showScratchGuide && (
                 <span className="text-[7.5px] text-amber-400 font-sans mr-0.5 flex items-center gap-0.5">
                   <Sparkles className="w-2 h-2" /> (خدش)
@@ -773,9 +793,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
           {/* Voucher Code Box */}
           {template.showCode && (
-            <div className="relative">
+            <div className="relative" dir="ltr">
               {codeStyle === 'split_pin' ? (
-                <div className="flex items-center justify-center gap-0.5 py-0.5">
+                <div className="flex items-center justify-center gap-0.5 py-0.5" dir="ltr">
                   {card.code.split('').map((ch, idx) => (
                     <div
                       key={idx}
@@ -797,6 +817,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                     ...codeExtraStyle,
                     fontSize: `${Math.round((template.fontSizeCode || 13) * autoScale)}px` 
                   }}
+                  dir="ltr"
                   className={`py-0.5 px-1.5 font-mono font-bold text-center tracking-wider transition-colors flex items-center justify-center gap-1 ${codeShapeClass}`}
                 >
                   <span>{card.code}</span>

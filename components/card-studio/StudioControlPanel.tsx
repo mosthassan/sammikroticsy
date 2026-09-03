@@ -643,7 +643,13 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               <button
                 type="button"
                 id="charset-digits-btn"
-                onClick={() => setCodeCharSet('digits_only')}
+                onClick={() => {
+                  setCodeCharSet('digits_only');
+                  // If prefix contains letters (like NW- or any alphabets), clear it so user gets pure digits!
+                  if (/[a-zA-Z\u0600-\u06FF]/.test(prefix)) {
+                    setPrefix('');
+                  }
+                }}
                 className={`p-2 rounded-xl border text-right transition flex items-center gap-2 ${
                   codeCharSet === 'digits_only'
                     ? 'bg-sky-600/20 border-sky-500 text-sky-300 font-bold'
@@ -698,9 +704,39 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 type="text"
                 value={prefix}
                 onChange={e => setPrefix(e.target.value)}
-                placeholder="مثال: NW- (أو اتركه فارغاً)"
+                placeholder={codeCharSet === 'digits_only' ? 'اتركه فارغاً لأرقام صافية 100%' : 'مثال: NW- (أو اتركه فارغاً)'}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-sky-500"
               />
+
+              {/* Proactive Help & Warning for Digits Only Mode */}
+              {codeCharSet === 'digits_only' && (
+                <>
+                  {/[a-zA-Z\u0600-\u06FF]/.test(prefix) ? (
+                    <div className="mt-1.5 p-2 bg-amber-500/15 border border-amber-500/40 rounded-lg text-[10.5px] text-amber-200 flex items-center justify-between gap-1 animate-in fade-in">
+                      <span className="flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>البادئة تحتوي أحرفاً ({prefix}) فستظهر على الكرت!</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPrefix('')}
+                        className="px-2 py-0.5 bg-amber-500 text-slate-950 font-bold rounded text-[10px] hover:bg-amber-400 shrink-0"
+                      >
+                        مسح الأحرف
+                      </button>
+                    </div>
+                  ) : prefix ? (
+                    <span className="text-[10px] text-slate-400 block mt-1">
+                      بادئة رقمية للكرت: <span className="font-mono text-sky-300">{prefix}XXXXXX</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1 mt-1 font-medium">
+                      <span>✓</span>
+                      <span>أرقام صافية 100% بدون أي حروف (مطابق لليوزر مانجر)</span>
+                    </span>
+                  )}
+                </>
+              )}
             </div>
 
             <div>

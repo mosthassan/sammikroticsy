@@ -120,7 +120,9 @@ export interface CardBatch {
   totalWholesaleValue: number;
   templateId: string;
   generatedAt: string;
-  status: 'active' | 'archived';
+  status: 'active' | 'archived' | 'synced' | 'pending';
+  syncedAt?: string;
+  lastSyncSource?: string;
 }
 
 export interface Agent {

@@ -41,7 +41,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   // Generator State
   const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || '');
   const [quantity, setQuantity] = useState<number>(24);
-  const [prefix, setPrefix] = useState<string>('NW-');
+  const [prefix, setPrefix] = useState<string>('');
   const [codeLength, setCodeLength] = useState<number>(6);
   const [codeCharSet, setCodeCharSet] = useState<CodeCharSet>('digits_only');
   const [passwordType, setPasswordType] = useState<'same_as_username' | 'separate_pin' | 'no_password'>('same_as_username');

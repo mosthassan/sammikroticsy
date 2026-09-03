@@ -36,10 +36,15 @@ export const A4SheetPreview: React.FC<A4SheetPreviewProps> = ({
   while (displayCards.length < cardsPerPage) {
     if (currentCards.length > 0) {
       const sample = currentCards[0];
+      const isDigitsOnly = /^\d+$/.test(sample.code);
+      const padCode = isDigitsOnly
+        ? `${882000 + displayCards.length * 13}`
+        : `${sample.code.replace(/\d+$/, '')}${882000 + displayCards.length * 13}`;
+
       displayCards.push({
         ...sample,
         id: `mock_pad_${displayCards.length}`,
-        code: `NW-${882000 + displayCards.length * 13}`
+        code: padCode
       });
     } else {
       break;
