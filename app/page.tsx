@@ -17,11 +17,14 @@ import {
   saveProfiles,
   saveTeamMember,
   deleteTeamMemberFromFirestore,
-  saveUserProfile
+  saveUserProfile,
+  saveTemplateToFirestore,
+  deleteTemplateFromFirestore
 } from '@/lib/firestore-service';
 import {
   Card,
   CardBatch,
+  CardTemplate,
   Agent,
   Invoice,
   PaymentTransaction,
@@ -388,6 +391,28 @@ export default function Home() {
     deleteBatchAndCards(tenantId, batchId).catch(err => {
       console.error('Failed to delete batch from Firestore:', err);
     });
+  };
+
+  const handleSaveTemplate = async (template: CardTemplate) => {
+    const tenantId = appState?.tenant.id || 'tenant_main_01';
+    // 1. Optimistic Local Update
+    updateState(prev => ({
+      ...prev,
+      templates: [template, ...prev.templates.filter(t => t.id !== template.id)]
+    }));
+    // 2. Persist to Firestore
+    return await saveTemplateToFirestore(tenantId, template);
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const tenantId = appState?.tenant.id || 'tenant_main_01';
+    // 1. Optimistic Local Update
+    updateState(prev => ({
+      ...prev,
+      templates: prev.templates.filter(t => t.id !== templateId)
+    }));
+    // 2. Delete from Firestore
+    return await deleteTemplateFromFirestore(tenantId, templateId);
   };
 
   const handleAddAgent = (
@@ -827,6 +852,8 @@ export default function Home() {
             templates={appState.templates}
             onBatchSaved={handleBatchSaved}
             onUpdateProfiles={handleUpdateProfiles}
+            onSaveTemplate={handleSaveTemplate}
+            onDeleteTemplate={handleDeleteTemplate}
           />
         )}
 

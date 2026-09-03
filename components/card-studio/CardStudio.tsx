@@ -9,7 +9,7 @@ import { InteractiveCardCanvas } from './InteractiveCardCanvas';
 import { StudioControlPanel } from './StudioControlPanel';
 import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store';
 import { generateCardsPdf } from '@/lib/pdf-generator';
-import { saveTemplateToFirestore, loadTemplatesFromFirestore } from '@/lib/firestore-service';
+import { saveTemplateToFirestore, loadTemplatesFromFirestore, deleteTemplateFromFirestore } from '@/lib/firestore-service';
 import { exportCardElementAsPng, exportTemplateBackgroundAsPng } from '@/lib/export-image';
 import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from '@/lib/routeros-utils';
 import {
@@ -22,7 +22,14 @@ import {
   Move,
   Camera,
   Download,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Bookmark,
+  BookmarkCheck,
+  BookmarkPlus,
+  Cloud,
+  Sparkles,
+  Tag,
+  X
 } from 'lucide-react';
 
 interface CardStudioProps {
@@ -31,6 +38,8 @@ interface CardStudioProps {
   templates: CardTemplate[];
   onBatchSaved: (batch: CardBatch, cards: Card[]) => Promise<any> | void;
   onUpdateProfiles?: (profiles: Profile[]) => void;
+  onSaveTemplate?: (template: CardTemplate) => Promise<any> | void;
+  onDeleteTemplate?: (templateId: string) => Promise<any> | void;
 }
 
 export const CardStudio: React.FC<CardStudioProps> = ({
@@ -38,7 +47,9 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   profiles,
   templates: initialTemplates,
   onBatchSaved,
-  onUpdateProfiles
+  onUpdateProfiles,
+  onSaveTemplate,
+  onDeleteTemplate
 }) => {
   // Generator State
   const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || '');
@@ -48,12 +59,22 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [codeCharSet, setCodeCharSet] = useState<CodeCharSet>('digits_only');
   const [passwordType, setPasswordType] = useState<'same_as_username' | 'separate_pin' | 'no_password'>('same_as_username');
 
+  // Local storage cache key for instant recovery
+  const LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY = `netflow_custom_templates_${tenant.id}`;
+
   // Template State
   const [templates, setTemplates] = useState<CardTemplate[]>(initialTemplates || DEFAULT_TEMPLATES);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(templates[0]?.id || 'tpl_cyber_neon_svg');
   const currentTemplate = useMemo(() => {
     return templates.find(t => t.id === selectedTemplateId) || templates[0] || DEFAULT_TEMPLATES[0];
   }, [templates, selectedTemplateId]);
+
+  // Saved Template Naming Modal State
+  const [isNamingModalOpen, setIsNamingModalOpen] = useState<boolean>(false);
+  const [customTemplateName, setCustomTemplateName] = useState<string>('');
+  const [templateLinkedProfileId, setTemplateLinkedProfileId] = useState<string>('');
+  const [saveAsMode, setSaveAsMode] = useState<'new' | 'update'>('new');
+  const [isSavingCustomTemplate, setIsSavingCustomTemplate] = useState<boolean>(false);
 
   // AI Template Generator State
   const [aiPrompt, setAiPrompt] = useState<string>('');
@@ -70,6 +91,25 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [isSavingToFirestore, setIsSavingToFirestore] = useState<boolean>(false);
   const [isSavedInFirestore, setIsSavedInFirestore] = useState<boolean>(false);
 
+  // Instant load from localStorage cache on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY);
+      if (cached) {
+        const parsed: CardTemplate[] = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTemplates(prev => {
+            const existingIds = new Set(prev.map(t => t.id));
+            const newOnes = parsed.filter(t => !existingIds.has(t.id));
+            return [...newOnes, ...prev];
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read cached templates from localStorage', e);
+    }
+  }, [tenant.id]);
+
   // Load custom templates from Firestore on mount
   useEffect(() => {
     let isMounted = true;
@@ -78,7 +118,12 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         setTemplates(prev => {
           const existingIds = new Set(prev.map(t => t.id));
           const newOnes = savedTpls.filter(t => !existingIds.has(t.id));
-          return [...newOnes, ...prev];
+          const merged = [...newOnes, ...prev];
+          try {
+            const customs = merged.filter(t => t.isCustom || t.savedByUser);
+            localStorage.setItem(LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customs));
+          } catch (e) {}
+          return merged;
         });
       }
     });
@@ -86,6 +131,19 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       isMounted = false;
     };
   }, [tenant.id]);
+
+  // Auto-switch to the template linked to this profile if available
+  useEffect(() => {
+    if (!selectedProfileId) return;
+    const linkedTpl = templates.find(t => t.linkedProfileId === selectedProfileId);
+    if (linkedTpl && linkedTpl.id !== selectedTemplateId) {
+      setSelectedTemplateId(linkedTpl.id);
+      setIsSavedInFirestore(true);
+      const prof = profiles.find(p => p.id === selectedProfileId);
+      setSuccessMessage(`تم تفعيل القالب المعتمد تلقائياً: "${linkedTpl.name}" لباقة ${prof?.name || ''}`);
+      setTimeout(() => setSuccessMessage(null), 3500);
+    }
+  }, [selectedProfileId, templates]);
 
   // File Upload & Drag-and-Drop state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -237,6 +295,125 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       alert('حدث خطأ أثناء حفظ القالب');
     } finally {
       setIsSavingToFirestore(false);
+    }
+  };
+
+  // Open Save & Naming Modal
+  const handleOpenSaveModal = (mode: 'new' | 'update' = 'new') => {
+    setSaveAsMode(mode);
+    if (mode === 'update' && currentTemplate.isCustom) {
+      setCustomTemplateName(currentTemplate.name);
+      setTemplateLinkedProfileId(currentTemplate.linkedProfileId || selectedProfileId || '');
+    } else {
+      // Auto-suggest name based on selected profile
+      const prof = profiles.find(p => p.id === selectedProfileId);
+      const suggested = prof
+        ? (prof.price ? `قالب كرت أبو ${prof.price}` : `قالب باقة ${prof.name}`)
+        : `قالب كرت مخصص ${templates.filter(t => t.isCustom).length + 1}`;
+      setCustomTemplateName(suggested);
+      setTemplateLinkedProfileId(selectedProfileId || '');
+    }
+    setIsNamingModalOpen(true);
+  };
+
+  // Save Custom Named Template to Cloud and Local Cache
+  const handleSaveCustomNamedTemplate = async () => {
+    const trimmedName = customTemplateName.trim();
+    if (!trimmedName) {
+      alert('يرجى إدخال اسم للقالب أولاً (مثال: قالب كرت أبو 200)');
+      return;
+    }
+
+    setIsSavingCustomTemplate(true);
+    try {
+      const isUpdating = saveAsMode === 'update' && currentTemplate.isCustom;
+      const tplId = isUpdating
+        ? currentTemplate.id
+        : `tpl_user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+      const linkedProf = profiles.find(p => p.id === templateLinkedProfileId);
+
+      const templateToSave: CardTemplate = {
+        ...currentTemplate,
+        id: tplId,
+        name: trimmedName,
+        isCustom: true,
+        savedByUser: true,
+        linkedProfileId: templateLinkedProfileId || undefined,
+        linkedProfileName: linkedProf?.name || undefined,
+        updatedAt: new Date().toISOString(),
+        createdAt: isUpdating ? (currentTemplate.createdAt || new Date().toISOString()) : new Date().toISOString()
+      };
+
+      // 1. Update local state
+      setTemplates(prev => {
+        const next = [templateToSave, ...prev.filter(t => t.id !== tplId)];
+        try {
+          const customs = next.filter(t => t.isCustom || t.savedByUser);
+          localStorage.setItem(LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customs));
+        } catch (err) {}
+        return next;
+      });
+
+      setSelectedTemplateId(tplId);
+      setIsSavedInFirestore(true);
+
+      // 2. Persist to Firestore
+      const res = await saveTemplateToFirestore(tenant.id, templateToSave);
+      if (!res.success) {
+        console.warn('Firestore template save warning:', res.error);
+      }
+
+      // 3. Notify parent if handler passed
+      if (onSaveTemplate) {
+        await onSaveTemplate(templateToSave);
+      }
+
+      setIsNamingModalOpen(false);
+      setSuccessMessage(`تم حفظ القالب بنجاح باسم "${trimmedName}" ومزامنته سحابياً!`);
+      setTimeout(() => setSuccessMessage(null), 4500);
+    } catch (err: any) {
+      console.error('Error saving custom template:', err);
+      alert(err?.message || 'حدث خطأ أثناء حفظ القالب');
+    } finally {
+      setIsSavingCustomTemplate(false);
+    }
+  };
+
+  // Delete Custom Template from Cloud
+  const handleDeleteCustomTemplate = async (templateId: string, templateName: string) => {
+    if (!confirm(`هل أنت متأكد من رغبتك في حذف القالب "${templateName}" من السحابة؟`)) {
+      return;
+    }
+
+    try {
+      // 1. Local state update
+      setTemplates(prev => {
+        const next = prev.filter(t => t.id !== templateId);
+        try {
+          const customs = next.filter(t => t.isCustom || t.savedByUser);
+          localStorage.setItem(LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customs));
+        } catch (e) {}
+        return next;
+      });
+
+      if (selectedTemplateId === templateId) {
+        setSelectedTemplateId(DEFAULT_TEMPLATES[0].id);
+      }
+
+      // 2. Delete from Firestore
+      await deleteTemplateFromFirestore(tenant.id, templateId);
+
+      // 3. Notify parent
+      if (onDeleteTemplate) {
+        await onDeleteTemplate(templateId);
+      }
+
+      setSuccessMessage(`تم حذف القالب "${templateName}" بنجاح.`);
+      setTimeout(() => setSuccessMessage(null), 3500);
+    } catch (err: any) {
+      console.error('Error deleting custom template:', err);
+      alert('فشل حذف القالب');
     }
   };
 
@@ -505,13 +682,41 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             <h1 className="text-2xl font-bold text-white tracking-tight">
               توليد وتصميم كروت الإنترنت وطباعتها
             </h1>
-            <p className="text-slate-400 text-sm mt-1">
-              قم بتحديد الباقة والكمية وتخصيص المظهر وتصدير ملفات PDF جاهزة مع كود QR للدخول السريع التلقائي.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-slate-400 text-sm">
+                توليد وطباعة الكروت، وتخصيص قوالب الباقات وحفظها سحابياً لمزامنتها في أي وقت.
+              </p>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 border border-slate-700/80 rounded-lg text-xs">
+                <span className="text-slate-400">القالب النشط:</span>
+                <strong className="text-amber-300 font-bold">{currentTemplate.name}</strong>
+                {currentTemplate.isCustom && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded-full font-bold">
+                    💎 سحابي
+                  </span>
+                )}
+                {currentTemplate.linkedProfileName && (
+                  <span className="text-[10px] text-sky-300 bg-sky-950 border border-sky-800 px-1.5 py-0.2 rounded-full font-mono">
+                    باقة: {currentTemplate.linkedProfileName}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Save Template Modal Trigger */}
+            <button
+              id="topbar-save-template-btn"
+              type="button"
+              onClick={() => handleOpenSaveModal(currentTemplate.isCustom ? 'update' : 'new')}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-950/30 transition transform active:scale-95 text-sm cursor-pointer"
+              title="تسمية وحفظ هذا القالب للباقة وتخزينه سحابياً"
+            >
+              <BookmarkPlus className="w-4 h-4 text-slate-950" />
+              <span>{currentTemplate.isCustom ? 'تحديث / حفظ باسم' : 'حفظ وتسمية القالب'}</span>
+            </button>
+
             <button
               id="save-batch-btn"
               onClick={handleSaveToInventory}
@@ -662,6 +867,8 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             handleSaveTemplateToFirestore={handleSaveTemplateToFirestore}
             isSavingToFirestore={isSavingToFirestore}
             isSavedInFirestore={isSavedInFirestore}
+            onOpenSaveModal={handleOpenSaveModal}
+            onDeleteCustomTemplate={handleDeleteCustomTemplate}
             aiPrompt={aiPrompt}
             setAiPrompt={setAiPrompt}
             isGeneratingAiTemplate={isGeneratingAiTemplate}
@@ -815,6 +1022,208 @@ export const CardStudio: React.FC<CardStudioProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal for Naming and Saving Custom Template to Cloud */}
+      {isNamingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-lg bg-slate-900 border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden text-right"
+            dir="rtl"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-amber-600/20 via-slate-800 to-slate-900 border-b border-slate-800 p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <BookmarkPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    حفظ وتسمية قالب الكرت (مزامنة سحابية)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    احفظ التنسيق والألوان بالاسم الذي تريده لترجع له بنقرة واحدة في أي وقت
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNamingModalOpen(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              {/* If updating existing custom template, offer choice */}
+              {currentTemplate.isCustom && (
+                <div className="flex items-center gap-2 p-1.5 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveAsMode('update');
+                      setCustomTemplateName(currentTemplate.name);
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold transition cursor-pointer ${
+                      saveAsMode === 'update'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    تحديث القالب الحالي ("{currentTemplate.name}")
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveAsMode('new');
+                      setCustomTemplateName(`${currentTemplate.name} (نسخة)`);
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold transition cursor-pointer ${
+                      saveAsMode === 'new'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    حفظ كقالب جديد باسم مختلف
+                  </button>
+                </div>
+              )}
+
+              {/* Template Name Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span>اسم القالب المميز:</span>
+                  <span className="text-[11px] text-amber-400 font-normal">مثال: قالب كرت أبو 200</span>
+                </label>
+                <input
+                  type="text"
+                  id="custom-template-name-input"
+                  value={customTemplateName}
+                  onChange={(e) => setCustomTemplateName(e.target.value)}
+                  placeholder="مثال: قالب كرت أبو 200 أو قالب VIP سرعة عالية..."
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                  autoFocus
+                />
+              </div>
+
+              {/* Quick Suggestion Chips */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-slate-400">اقتراحات سريعة للأسماء:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedProfile && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomTemplateName(`قالب كرت باقة ${selectedProfile.name}`)}
+                      className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition cursor-pointer"
+                    >
+                      قالب كرت باقة {selectedProfile.name}
+                    </button>
+                  )}
+                  {selectedProfile?.price && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomTemplateName(`قالب كرت أبو ${selectedProfile.price}`)}
+                      className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition cursor-pointer"
+                    >
+                      قالب كرت أبو {selectedProfile.price}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setCustomTemplateName('قالب كرت VIP فايبر')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+                  >
+                    قالب كرت VIP فايبر
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTemplateName('قالب كرت سهرة موفر')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+                  >
+                    قالب كرت سهرة موفر
+                  </button>
+                </div>
+              </div>
+
+              {/* Link with Profile / Package (Optional) */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span>ربط القالب بباقة معينة (مزامنة تلقائية):</span>
+                  <span className="text-[10px] text-slate-400">سيتم تفعيله فور اختيار هذه الباقة</span>
+                </label>
+                <select
+                  value={templateLinkedProfileId}
+                  onChange={(e) => setTemplateLinkedProfileId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition font-sans"
+                >
+                  <option value="">-- قالب عام (متاح لكل الباقات) --</option>
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>
+                      ربط بباقة: {p.name} (سعر {p.price} {tenant.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Current Template Specs Preview */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-slate-300">
+                  <span>توزيع الورقة:</span>
+                  <span className="font-mono text-amber-400">
+                    {currentTemplate.cardsPerRow} × {currentTemplate.cardsPerCol} = {currentTemplate.cardsPerRow * currentTemplate.cardsPerCol} كرت في صفحة A4
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-300">
+                  <span>نوع الرمز:</span>
+                  <span className="text-sky-300">
+                    {currentTemplate.qrType === 'both' ? 'باركود وQR كود' : currentTemplate.qrType === 'qr_only' ? 'QR كود سريع' : 'باركود شريطي'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-300">
+                  <span>حالة التخزين:</span>
+                  <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>تخزين سحابي مباشر ومحلي دائم</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-950/90 border-t border-slate-800 p-4 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsNamingModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                id="confirm-save-custom-template-btn"
+                onClick={handleSaveCustomNamedTemplate}
+                disabled={isSavingCustomTemplate || !customTemplateName.trim()}
+                className="px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 text-xs font-black rounded-xl transition shadow-lg shadow-amber-950/40 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavingCustomTemplate ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                    <span>جاري الحفظ في السحابة...</span>
+                  </>
+                ) : (
+                  <>
+                    <BookmarkCheck className="w-4 h-4 text-slate-950" />
+                    <span>حفظ القالب سحابياً الآن</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

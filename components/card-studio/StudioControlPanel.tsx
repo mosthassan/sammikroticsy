@@ -44,7 +44,10 @@ import {
   Image as ImageIcon,
   Camera,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Bookmark,
+  BookmarkCheck,
+  BookmarkPlus
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -72,6 +75,8 @@ interface StudioControlPanelProps {
   handleSaveTemplateToFirestore: () => void;
   isSavingToFirestore: boolean;
   isSavedInFirestore: boolean;
+  onOpenSaveModal?: (mode?: 'new' | 'update') => void;
+  onDeleteCustomTemplate?: (templateId: string, name: string) => void;
   aiPrompt: string;
   setAiPrompt: (p: string) => void;
   isGeneratingAiTemplate: boolean;
@@ -123,6 +128,8 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   handleSaveTemplateToFirestore,
   isSavingToFirestore,
   isSavedInFirestore,
+  onOpenSaveModal,
+  onDeleteCustomTemplate,
   aiPrompt,
   setAiPrompt,
   isGeneratingAiTemplate,
@@ -193,6 +200,11 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
       borderRadius: radius
     });
   };
+
+  // User custom templates (saved by name or generated)
+  const customSavedTemplates = templates.filter(
+    t => t.isCustom || t.savedByUser || t.id.startsWith('tpl_user_') || t.id.startsWith('tpl_custom_') || t.isAiGenerated
+  );
 
   const filteredTemplates = PREBUILT_TEMPLATES_LIBRARY.filter(t => {
     if (templateCategory === 'all') return true;
@@ -388,6 +400,83 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Quick Template Selector for Package */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 hover:border-sky-500/40 rounded-xl p-3.5 space-y-2.5 transition shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <BookmarkCheck className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-slate-200">قالب الكرت وتنسيق المظهر للباقة:</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {currentTemplate.isCustom ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <span>💎 قالب مخصص سحابياً</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                    قالب قياسي
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('styling')}
+                  className="text-[11px] text-sky-400 hover:text-sky-300 underline font-semibold flex items-center gap-1"
+                >
+                  <Palette className="w-3 h-3" />
+                  <span>استوديو المظهر</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Template Selector Dropdown & Save Button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <select
+                id="select-package-template"
+                value={selectedTemplateId}
+                onChange={e => setSelectedTemplateId(e.target.value)}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500 transition font-sans"
+              >
+                {customSavedTemplates.length > 0 && (
+                  <optgroup label="🌟 قوالبي المحفوظة المخصصة للباقات">
+                    {customSavedTemplates.map(t => (
+                      <option key={t.id} value={t.id}>
+                        ⭐ {t.name} {t.linkedProfileName ? `(مرتبط بـ ${t.linkedProfileName})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="🎨 مكتبة القوالب الجاهزة">
+                  {PREBUILT_TEMPLATES_LIBRARY.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+
+              <button
+                type="button"
+                id="quick-save-named-template-btn"
+                onClick={() => onOpenSaveModal?.(currentTemplate.isCustom ? 'update' : 'new')}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95"
+                title="تسمية وحفظ هذا التنسيق كقالب للباقة ليتم مزامنته سحابياً واستخدامه دائماً"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5" />
+                <span>{currentTemplate.isCustom ? 'تحديث / حفظ باسم' : 'حفظ وتسمية القالب للباقة'}</span>
+              </button>
+            </div>
+
+            {/* Current Template Status Indicator */}
+            <div className="flex items-center justify-between text-[10.5px] text-slate-400 pt-0.5">
+              <span className="truncate">
+                التصميم المفعل: <strong className="text-slate-200">{currentTemplate.name}</strong>
+              </span>
+              <span className="text-emerald-400 font-mono">
+                {currentTemplate.cardsPerRow * currentTemplate.cardsPerCol} كرت/صفحة A4
+              </span>
+            </div>
           </div>
 
           {/* Quick Presets */}
@@ -837,37 +926,150 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 </button>
               )}
 
-              {/* Save Template to Firestore */}
+              {/* Save Template to Firestore with Custom Name */}
               <button
                 type="button"
-                id="save-template-firestore-btn"
-                onClick={handleSaveTemplateToFirestore}
+                id="save-template-named-btn"
+                onClick={() => onOpenSaveModal?.(currentTemplate.isCustom ? 'update' : 'new')}
                 disabled={isSavingToFirestore}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
-                  isSavedInFirestore
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                    : 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow-md'
-                }`}
-                title="حفظ القالب الحالي في Firestore"
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                title="تسمية وحفظ هذا القالب للباقة وتخزينه سحابياً"
               >
-                {isSavingToFirestore ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>جاري الحفظ...</span>
-                  </>
-                ) : isSavedInFirestore ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>محفوظ سحابياً</span>
-                  </>
-                ) : (
-                  <>
-                    <Cloud className="w-3.5 h-3.5" />
-                    <span>حفظ سحابي</span>
-                  </>
-                )}
+                <BookmarkPlus className="w-3.5 h-3.5 text-slate-950" />
+                <span>{currentTemplate.isCustom ? 'حفظ التعديلات / باسم جديد' : '💾 حفظ وتسمية القالب'}</span>
               </button>
             </div>
+          </div>
+
+          {/* USER CUSTOM SAVED TEMPLATES SECTION */}
+          <div className="bg-slate-950/90 border border-amber-500/30 rounded-2xl p-4 space-y-3.5 shadow-lg relative overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <BookmarkCheck className="w-4 h-4 text-amber-400" />
+                <h3 className="font-bold text-white text-sm">
+                  قوالبي المجهزة مسبقاً للباقات ({customSavedTemplates.length})
+                </h3>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                  سحابي ☁️
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {currentTemplate.isCustom && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSaveModal?.('update')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                    title="تحديث هذا القالب بتعديلاتك الأخيرة"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>تحديث التعديلات</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  id="open-save-template-modal-btn"
+                  onClick={() => onOpenSaveModal?.('new')}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                  title="حفظ التنسيق والشكل الحالي باسم مخصص (مثال: قالب كرت أبو 200) وتخزينه سحابياً"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                  <span>حفظ التنسيق الحالي كقالب للباقة</span>
+                </button>
+              </div>
+            </div>
+
+            {customSavedTemplates.length === 0 ? (
+              <div className="p-4 bg-slate-900/60 border border-dashed border-slate-800 rounded-xl text-center space-y-1.5">
+                <p className="text-xs text-slate-300 font-medium">
+                  لم تقم بحفظ أي قالب مخصص حتى الآن
+                </p>
+                <p className="text-[11px] text-slate-400 max-w-lg mx-auto leading-relaxed">
+                  قم باختيار الألوان والخطوط والشكل المناسب للباقة التي تريدها، ثم اضغط على <strong className="text-amber-300 font-bold">"حفظ التنسيق الحالي كقالب للباقة"</strong> وسَمِّه (مثال: <span className="text-sky-300 font-mono">قالب كرت أبو 200</span>). سيتم حفظه سحابياً ليظهر هنا دائماً ويتم مزامنته تلقائياً عند اختيار باقته!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {customSavedTemplates.map(tpl => {
+                  const isSelected = tpl.id === currentTemplate.id;
+                  return (
+                    <div
+                      key={tpl.id}
+                      className={`p-3 rounded-xl border text-right transition relative overflow-hidden flex flex-col justify-between group ${
+                        isSelected
+                          ? 'border-amber-400 bg-amber-950/20 ring-2 ring-amber-500/40 shadow-lg'
+                          : 'border-slate-800 bg-slate-900/90 hover:border-slate-700 hover:bg-slate-900'
+                      }`}
+                    >
+                      {/* Top Row: Name and Actions */}
+                      <div className="flex items-start justify-between gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTemplateId(tpl.id)}
+                          className="flex-1 text-right focus:outline-none cursor-pointer"
+                        >
+                          <div className="text-xs font-bold text-white group-hover:text-amber-300 transition flex items-center gap-1.5">
+                            <Bookmark className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span className="truncate">{tpl.name}</span>
+                          </div>
+                          {tpl.linkedProfileName && (
+                            <span className="inline-block text-[10px] text-sky-400 bg-sky-950/80 border border-sky-800/60 px-1.5 py-0.5 rounded-md mt-1">
+                              🏷️ باقة: {tpl.linkedProfileName}
+                            </span>
+                          )}
+                        </button>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {isSelected && (
+                            <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black" title="القالب النشط حالياً">
+                              ✓
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCustomTemplate?.(tpl.id, tpl.name);
+                            }}
+                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition cursor-pointer"
+                            title="حذف هذا القالب من السحابة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Color swatch bar */}
+                      <div className="w-full h-2 rounded-full overflow-hidden flex border border-slate-800/80 my-2.5">
+                        <div className="flex-1" style={{ backgroundColor: tpl.bgGradientStart || tpl.bgColor || '#0f172a' }} />
+                        <div className="flex-1" style={{ backgroundColor: tpl.bgGradientEnd || '#1e293b' }} />
+                        <div className="w-2" style={{ backgroundColor: tpl.accentColor || '#38bdf8' }} />
+                        <div className="w-2" style={{ backgroundColor: tpl.badgeBg || '#f59e0b' }} />
+                      </div>
+
+                      {/* Bottom row: Load Button */}
+                      <div className="flex items-center justify-between pt-1 text-[10px]">
+                        <span className="text-slate-400 font-mono">
+                          {tpl.cardsPerRow * tpl.cardsPerCol} كرت/A4
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTemplateId(tpl.id)}
+                          className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500 text-slate-950 shadow'
+                              : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {isSelected ? 'مفعل حالياً' : 'تطبيق ومزامنة'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 1. Pre-built Templates Library (12 Diverse High-Res Designs) */}

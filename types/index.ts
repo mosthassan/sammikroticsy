@@ -268,7 +268,12 @@ export interface CardTemplate {
   borderWidth?: number;
   svgCode?: string;
   isAiGenerated?: boolean;
+  isCustom?: boolean;
+  savedByUser?: boolean;
+  linkedProfileId?: string;
+  linkedProfileName?: string;
   createdAt?: string;
+  updatedAt?: string;
   // Element-Level Styling & Layout Shape Customization
   elementScale?: number; // Custom scale multiplier (default 1.0)
   codeBoxStyle?: 'modern_box' | 'pill_badge' | 'ticket_dashed' | 'neon_glow' | 'minimal_clean' | 'split_pin';
