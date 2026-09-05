@@ -204,3 +204,49 @@ export function computeCardAutoScale(
   
   return Number((clampedScale * (manualScale || 1.0)).toFixed(2));
 }
+
+/**
+ * Robust cross-browser clipboard copy function with fallback for iframes and restrictive environments.
+ */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+
+  // 1. Try modern navigator.clipboard API if available
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      console.warn('navigator.clipboard.writeText failed, falling back to textarea execCommand:', err);
+    }
+  }
+
+  // 2. Robust fallback via hidden textarea and document.execCommand('copy')
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = '0';
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    textArea.style.opacity = '0';
+    textArea.style.pointerEvents = 'none';
+    textArea.setAttribute('readonly', '');
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, textArea.value.length);
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (fallbackErr) {
+    console.error('Cross-browser fallback copy failed:', fallbackErr);
+    return false;
+  }
+}

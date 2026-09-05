@@ -134,6 +134,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
     return (
       <div
         id={id || `card-${card.id}`}
+        data-card-preview="true"
         style={{
           ...bgStyle,
           width: isZoomed ? '350px' : '100%',
@@ -480,11 +481,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
 
     return (
       <div
-        id={`card-${card.id}`}
+        id={id || `card-${card.id}`}
+        data-card-preview="true"
         style={{
           ...bgStyle,
           width: isZoomed ? '350px' : '100%',
-          aspectRatio: `${template.cardWidthMm || 63}/${template.cardHeightMm || 19}`,
+          aspectRatio: `${template.cardWidthMm || 63}/${template.cardHeightMm || 22}`,
           transform: scale !== 1 ? `scale(${scale})` : undefined,
           transformOrigin: 'top right'
         }}
@@ -627,6 +629,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
   return (
     <div
       id={id || `card-${card.id}`}
+      data-card-preview="true"
       style={{
         ...bgStyle,
         width: isZoomed ? '350px' : '100%',

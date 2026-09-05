@@ -5,6 +5,7 @@ import { Card, CardBatch, Profile, Tenant, CardTemplate } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { generateRouterOSTerminalScript } from '@/lib/store';
+import { copyTextToClipboard } from '@/lib/utils';
 import {
   Layers,
   Search,
@@ -23,7 +24,9 @@ import {
   Tag,
   ShieldCheck,
   CheckCircle2,
-  CircleDot
+  CircleDot,
+  Copy,
+  AlertCircle
 } from 'lucide-react';
 
 interface InventoryManagerProps {
@@ -49,6 +52,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isExportingPdf, setIsExportingPdf] = useState<string | null>(null);
   const [copiedBatchScript, setCopiedBatchScript] = useState<string | null>(null);
+  const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
   // Filtered Cards
   const filteredCards = useMemo(() => {
@@ -69,7 +73,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   // Handle Export Batch PDF
   const handleExportBatchPdf = async (batch: CardBatch) => {
-    const batchCards = cards.filter(c => c.batchId === batch.id);
+    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
     if (batchCards.length === 0) return;
     
     setIsExportingPdf(batch.id);
@@ -92,16 +96,87 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   // Copy MikroTik script for specific batch
-  const handleCopyBatchScript = (batch: CardBatch) => {
-    const batchCards = cards.filter(c => c.batchId === batch.id);
+  const handleCopyBatchScript = async (batch: CardBatch) => {
+    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
+    if (batchCards.length === 0) {
+      setToastNotification({
+        message: `تنبيه: لا توجد كروت مسجلة في الذاكرة الحالية للدفعة (${batch.batchNumber}).`,
+        type: 'warning'
+      });
+      setTimeout(() => setToastNotification(null), 3500);
+      return;
+    }
+
     const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
-    navigator.clipboard.writeText(script);
-    setCopiedBatchScript(batch.id);
-    setTimeout(() => setCopiedBatchScript(null), 3000);
+    const success = await copyTextToClipboard(script);
+    if (success) {
+      setCopiedBatchScript(batch.id);
+      setToastNotification({
+        message: `تم نسخ سكربت المايكروتك للدفعة (${batch.batchNumber}) بنجاح! لعدد ${batchCards.length} كرت جاهز للصق في تيرمينال الراوتر.`,
+        type: 'success'
+      });
+      setTimeout(() => {
+        setCopiedBatchScript(null);
+        setToastNotification(null);
+      }, 4000);
+    } else {
+      setToastNotification({
+        message: 'تعذر النسخ إلى الحافظة تلقائياً. يرجى التحقق من أذونات المتصفح.',
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 3500);
+    }
+  };
+
+  // Download .rsc script file for specific batch
+  const handleDownloadBatchRsc = (batch: CardBatch) => {
+    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
+    if (batchCards.length === 0) return;
+    const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
+    const blob = new Blob([script], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mikrotik_batch_${batch.batchNumber}_${batchCards.length}cards.rsc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setToastNotification({
+      message: `تم تنزيل ملف السكربت mikrotik_batch_${batch.batchNumber}.rsc بنجاح!`,
+      type: 'success'
+    });
+    setTimeout(() => setToastNotification(null), 3500);
   };
 
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Toast Notification Banner */}
+      {toastNotification && (
+        <div
+          className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-sm animate-fade-in shadow-lg ${
+            toastNotification.type === 'success'
+              ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+              : toastNotification.type === 'warning'
+              ? 'bg-amber-950/80 border-amber-500/50 text-amber-200'
+              : 'bg-rose-950/80 border-rose-500/50 text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {toastNotification.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
+            {toastNotification.type === 'warning' && <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />}
+            {toastNotification.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />}
+            <span className="font-medium">{toastNotification.message}</span>
+          </div>
+          <button
+            onClick={() => setToastNotification(null)}
+            className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-slate-800/60"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
+
       {/* Header & Tabs */}
       <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800 p-5 rounded-2xl shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -224,14 +299,29 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
                           <button
                             onClick={() => handleCopyBatchScript(batch)}
-                            title="نسخ سكريبت المايكروتك لهذه الدفعة"
-                            className="p-1.5 bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border border-amber-500/30 rounded-lg transition"
+                            title={copiedBatchScript === batch.id ? "تم نسخ السكربت بنجاح!" : "نسخ سكريبت المايكروتك لهذه الدفعة"}
+                            className={`p-1.5 rounded-lg border transition flex items-center gap-1 ${
+                              copiedBatchScript === batch.id
+                                ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500 shadow-md ring-2 ring-emerald-500/30'
+                                : 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border-amber-500/30'
+                            }`}
                           >
                             {copiedBatchScript === batch.id ? (
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              <>
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                                <span className="text-[10px] font-bold text-emerald-300 hidden xl:inline">منسوخ!</span>
+                              </>
                             ) : (
                               <Terminal className="w-3.5 h-3.5" />
                             )}
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadBatchRsc(batch)}
+                            title="تنزيل ملف أوامر المايكروتك لهذه الدفعة (.rsc)"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg transition"
+                          >
+                            <FileDown className="w-3.5 h-3.5" />
                           </button>
 
                           <button

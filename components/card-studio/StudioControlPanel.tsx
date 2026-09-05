@@ -47,7 +47,14 @@ import {
   ChevronUp,
   Bookmark,
   BookmarkCheck,
-  BookmarkPlus
+  BookmarkPlus,
+  Move,
+  RefreshCw,
+  AlignRight,
+  AlignCenter,
+  AlignLeft,
+  RotateCcw,
+  Eye
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -101,6 +108,8 @@ interface StudioControlPanelProps {
   onExportCardImage?: () => void;
   onExportBackgroundImage?: () => void;
   isExportingImage?: boolean;
+  previewMode?: 'single' | 'a4' | 'designer';
+  setPreviewMode?: (m: 'single' | 'a4' | 'designer') => void;
 }
 
 export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
@@ -153,7 +162,9 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   handleExportCsv,
   onExportCardImage,
   onExportBackgroundImage,
-  isExportingImage = false
+  isExportingImage = false,
+  previewMode,
+  setPreviewMode
 }) => {
   const [activeTab, setActiveTab] = useState<'generator' | 'styling' | 'elements' | 'layout' | 'scripts'>('generator');
   const [templateCategory, setTemplateCategory] = useState<'all' | 'dark' | 'luxury' | 'light' | 'vibrant'>('all');
@@ -198,6 +209,95 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   const applyShapePreset = (radius: number) => {
     handleUpdateTemplate({
       borderRadius: radius
+    });
+  };
+
+  // Element Position & Size Inspector State
+  const [inspectorElement, setInspectorElement] = useState<string>('code');
+  const [showInspectorDetails, setShowInspectorDetails] = useState<boolean>(true);
+
+  const INSPECTOR_ELEMENTS = [
+    { key: 'code', label: 'كود الدخول (Code)', icon: Hash },
+    { key: 'pin', label: 'الرمز السري (PIN)', icon: KeyRound },
+    { key: 'networkName', label: 'اسم الشبكة', icon: Type },
+    { key: 'price', label: 'شارة السعر', icon: Tag },
+    { key: 'qr', label: 'رمز الاستجابة (QR)', icon: QrCode },
+    { key: 'profileName', label: 'اسم الباقة / الفئة', icon: Sparkles },
+    { key: 'uptime', label: 'الصلاحية (Uptime)', icon: Calendar },
+    { key: 'byteLimit', label: 'رصيد الميغابايت', icon: Maximize2 },
+    { key: 'supportPhone', label: 'هاتف الدعم الفني', icon: Sliders },
+    { key: 'serial', label: 'الرقم التسلسلي (SN)', icon: Hash },
+    { key: 'createdAt', label: 'تأريخ الطباعة', icon: Calendar }
+  ];
+
+  const updateElementPos = (key: string, updates: Partial<{ x: number; y: number; fontSize: number; align: 'left' | 'center' | 'right' }>) => {
+    const currentPositions = (currentTemplate.positions as any) || {};
+    const existing = currentPositions[key] || {};
+    const updated = {
+      ...currentPositions,
+      [key]: {
+        ...existing,
+        ...updates
+      }
+    };
+    handleUpdateTemplate({ positions: updated });
+  };
+
+  const handleSmartAutoFit = (newWidthMm?: number, newHeightMm?: number) => {
+    const w = newWidthMm !== undefined ? newWidthMm : (currentTemplate.cardWidthMm || 63);
+    const h = newHeightMm !== undefined ? newHeightMm : (currentTemplate.cardHeightMm || 33);
+    const isStrip = h <= 25;
+    const ratio = w / h;
+    const scale = Math.min(1.4, Math.max(0.65, (w * h) / (63 * 33)));
+
+    let newPositions: Record<string, any> = {};
+
+    if (isStrip) {
+      newPositions = {
+        networkName: { x: 3, y: 10, fontSize: Math.round(9 * scale), align: 'right' },
+        price: { x: 50, y: 50, fontSize: Math.round(8.5 * scale), align: 'center' },
+        qr: { x: 80, y: 12, fontSize: 10 },
+        code: { x: 15, y: 52, fontSize: Math.round(11 * scale), align: 'center' },
+        profileName: { x: 3, y: 75, fontSize: Math.round(7.5 * scale), align: 'right' },
+        uptime: { x: 35, y: 75, fontSize: Math.round(7 * scale), align: 'center' }
+      };
+    } else if (ratio < 1.3) {
+      newPositions = {
+        networkName: { x: 5, y: 5, fontSize: Math.round(12 * scale), align: 'right' },
+        price: { x: 70, y: 5, fontSize: Math.round(11 * scale), align: 'center' },
+        profileName: { x: 5, y: 22, fontSize: Math.round(10 * scale), align: 'right' },
+        qr: { x: 32, y: 35, fontSize: 10 },
+        code: { x: 10, y: 68, fontSize: Math.round(13.5 * scale), align: 'center' },
+        pin: { x: 10, y: 84, fontSize: Math.round(9 * scale), align: 'center' },
+        uptime: { x: 5, y: 92, fontSize: Math.round(8 * scale), align: 'right' },
+        byteLimit: { x: 55, y: 92, fontSize: Math.round(8 * scale), align: 'left' }
+      };
+    } else {
+      newPositions = {
+        networkName: { x: 5, y: 6, fontSize: Math.round(11 * scale), align: 'right' },
+        price: { x: 74, y: 6, fontSize: Math.round(10.5 * scale), align: 'center' },
+        createdAt: { x: 50, y: 7, fontSize: Math.round(7.5 * scale), align: 'center' },
+        qr: { x: 6, y: 26, fontSize: 10 },
+        profileName: { x: 42, y: 26, fontSize: Math.round(10 * scale), align: 'right' },
+        serial: { x: 78, y: 27, fontSize: Math.round(7.5 * scale), align: 'center' },
+        code: { x: 40, y: 44, fontSize: Math.round(13.5 * scale), align: 'center' },
+        pin: { x: 40, y: 68, fontSize: Math.round(8.5 * scale), align: 'center' },
+        uptime: { x: 5, y: 88, fontSize: Math.round(8 * scale), align: 'right' },
+        byteLimit: { x: 32, y: 88, fontSize: Math.round(8 * scale), align: 'center' },
+        supportPhone: { x: 60, y: 88, fontSize: Math.round(7.5 * scale), align: 'left' }
+      };
+    }
+
+    const recommendedCols = Math.max(1, Math.min(6, Math.floor(200 / (w + 2))));
+    const recommendedRows = Math.max(1, Math.min(15, Math.floor(285 / (h + 2))));
+
+    handleUpdateTemplate({
+      cardWidthMm: w,
+      cardHeightMm: h,
+      cardsPerRow: recommendedCols,
+      cardsPerCol: recommendedRows,
+      elementScale: scale,
+      positions: newPositions
     });
   };
 
@@ -273,7 +373,7 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
-          <span>عناصر الكرت</span>
+          <span>عناصر ومقاس الكرت</span>
         </button>
 
         <button
@@ -986,7 +1086,7 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                   لم تقم بحفظ أي قالب مخصص حتى الآن
                 </p>
                 <p className="text-[11px] text-slate-400 max-w-lg mx-auto leading-relaxed">
-                  قم باختيار الألوان والخطوط والشكل المناسب للباقة التي تريدها، ثم اضغط على <strong className="text-amber-300 font-bold">"حفظ التنسيق الحالي كقالب للباقة"</strong> وسَمِّه (مثال: <span className="text-sky-300 font-mono">قالب كرت أبو 200</span>). سيتم حفظه سحابياً ليظهر هنا دائماً ويتم مزامنته تلقائياً عند اختيار باقته!
+                  قم باختيار الألوان والخطوط والشكل المناسب للباقة التي تريدها، ثم اضغط على <strong className="text-amber-300 font-bold">&quot;حفظ التنسيق الحالي كقالب للباقة&quot;</strong> وسَمِّه (مثال: <span className="text-sky-300 font-mono">قالب كرت أبو 200</span>). سيتم حفظه سحابياً ليظهر هنا دائماً ويتم مزامنته تلقائياً عند اختيار باقته!
                 </p>
               </div>
             ) : (
@@ -1551,19 +1651,337 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 3: ELEMENTS & SCRATCH FOIL */}
+      {/* TAB 3: ELEMENTS & DIMENSIONS */}
       {activeTab === 'elements' && (
         <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4 animate-in fade-in duration-150">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Sliders className="w-5 h-5 text-sky-400" />
-              <h2 className="font-bold text-white text-base">العناصر والبيانات المعروضة</h2>
+              <h2 className="font-bold text-white text-base">مقاس الكرت والعناصر ومواقعها</h2>
             </div>
-            <span className="text-xs text-slate-400">تخصيص الحقول</span>
+            <span className="text-xs text-sky-400 font-mono font-bold bg-sky-950/60 border border-sky-800 px-2 py-0.5 rounded-lg">
+              {currentTemplate.cardWidthMm || 63} × {currentTemplate.cardHeightMm || 33} مم
+            </span>
           </div>
 
-          {/* Toggles Grid */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* 1. SECTION: Manual Dimension Control (عرض وطول الكرت يدوياً) */}
+          <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Maximize2 className="w-4 h-4 text-emerald-400" />
+                <span>تحديد عرض الكرت وطوله يدوياً (بالمليمتر mm)</span>
+              </span>
+              <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-md font-mono">
+                تناسب {((currentTemplate.cardWidthMm || 63) / (currentTemplate.cardHeightMm || 33)).toFixed(2)} : 1
+              </span>
+            </div>
+
+            {/* Dimension Sliders & Inputs */}
+            <div className="grid grid-cols-2 gap-3.5">
+              {/* Width */}
+              <div className="space-y-1.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    عرض الكرت (Width)
+                  </label>
+                  <span className="text-xs font-mono font-bold text-sky-400">
+                    {currentTemplate.cardWidthMm || 63} مم
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={25}
+                  max={120}
+                  step={0.5}
+                  value={currentTemplate.cardWidthMm || 63}
+                  onChange={e => handleUpdateTemplate({ cardWidthMm: parseFloat(e.target.value) || 63 })}
+                  className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={25}
+                    max={120}
+                    step={0.5}
+                    value={currentTemplate.cardWidthMm || 63}
+                    onChange={e => handleUpdateTemplate({ cardWidthMm: parseFloat(e.target.value) || 63 })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center font-mono text-slate-100"
+                  />
+                  <span className="text-[10px] text-slate-400">مم</span>
+                </div>
+              </div>
+
+              {/* Height */}
+              <div className="space-y-1.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    طول/ارتفاع الكرت (Height)
+                  </label>
+                  <span className="text-xs font-mono font-bold text-emerald-400">
+                    {currentTemplate.cardHeightMm || 33} مم
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={15}
+                  max={90}
+                  step={0.5}
+                  value={currentTemplate.cardHeightMm || 33}
+                  onChange={e => handleUpdateTemplate({ cardHeightMm: parseFloat(e.target.value) || 33 })}
+                  className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={15}
+                    max={90}
+                    step={0.5}
+                    value={currentTemplate.cardHeightMm || 33}
+                    onChange={e => handleUpdateTemplate({ cardHeightMm: parseFloat(e.target.value) || 33 })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center font-mono text-slate-100"
+                  />
+                  <span className="text-[10px] text-slate-400">مم</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Dimension Chips */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-slate-400 font-medium block">
+                مقاسات سريعة وشائعة لشبكات الإنترنت:
+              </span>
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                {[
+                  { label: '63 × 33 مم (قياسي)', w: 63, h: 33 },
+                  { label: '63 × 19 مم (شريط توفير)', w: 63, h: 19 },
+                  { label: '70 × 35 مم (قسيمة عريضة)', w: 70, h: 35 },
+                  { label: '85 × 54 مم (بطاقة بلاستيك)', w: 85, h: 54 },
+                  { label: '55 × 25 مم (شريط ميني)', w: 55, h: 25 },
+                  { label: '48 × 28 مم (كروت مدمجة)', w: 48, h: 28 }
+                ].map(dim => {
+                  const isCurrent =
+                    Math.abs((currentTemplate.cardWidthMm || 63) - dim.w) < 0.5 &&
+                    Math.abs((currentTemplate.cardHeightMm || 33) - dim.h) < 0.5;
+
+                  return (
+                    <button
+                      key={dim.label}
+                      type="button"
+                      onClick={() => {
+                        handleUpdateTemplate({ cardWidthMm: dim.w, cardHeightMm: dim.h });
+                        handleSmartAutoFit(dim.w, dim.h);
+                      }}
+                      className={`py-1.5 px-1 rounded-lg border text-[10px] font-mono transition ${
+                        isCurrent
+                          ? 'bg-sky-600 text-white border-sky-400 font-bold shadow-sm'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {dim.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Action Buttons: Auto-Fit & Visual Drag & Drop */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => handleSmartAutoFit()}
+                className="py-2 px-3 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
+                title="إعادة موازنة مقاسات الخطوط وصناديق الأكواد والباركود تلقائياً لتناسب المساحة الحالية"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>موازنة وتكييف تلقائي</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (setPreviewMode) {
+                    setPreviewMode('designer');
+                  }
+                }}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md ${
+                  previewMode === 'designer'
+                    ? 'bg-amber-600 text-white border-amber-400 shadow-amber-900/30'
+                    : 'bg-slate-900 hover:bg-slate-800 text-amber-300 border-amber-600/40'
+                }`}
+                title="فتح لوحة السحب والإفلات لتحريك العناصر بحرية بالماوس"
+              >
+                <Move className="w-3.5 h-3.5 text-amber-400" />
+                <span>مصمم السحب بالماوس</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. SECTION: Element Position & Size Control (التحكم بالعناصر ومواقعها وأحجامها داخل الكرت) */}
+          <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-sky-400" />
+                <span>التحكم الدقيق بمواقع وأحجام عناصر الكرت</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowInspectorDetails(!showInspectorDetails)}
+                className="text-[11px] text-sky-400 hover:text-sky-300 font-medium"
+              >
+                {showInspectorDetails ? 'طي الخيارات' : 'توسيع الخيارات'}
+              </button>
+            </div>
+
+            {/* Element Selector Dropdown / Pills */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-400 block font-medium">
+                اختر العنصر المراد ضبط موقعه وحجمه:
+              </label>
+              <div className="grid grid-cols-3 gap-1 max-h-36 overflow-y-auto pr-1">
+                {INSPECTOR_ELEMENTS.map(item => {
+                  const IconComp = item.icon;
+                  const isSelected = inspectorElement === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setInspectorElement(item.key);
+                        setShowInspectorDetails(true);
+                      }}
+                      className={`p-1.5 rounded-lg border text-right transition flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-sky-950 border-sky-500 text-sky-200 font-bold shadow-sm'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <IconComp className={`w-3 h-3 ${isSelected ? 'text-sky-400' : 'text-slate-500'}`} />
+                      <span className="text-[10px] truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selected Element Controls */}
+            {showInspectorDetails && (() => {
+              const curPositions = (currentTemplate.positions as any) || {};
+              const curElementPos = curPositions[inspectorElement] || {};
+              const currentX = curElementPos.x !== undefined ? curElementPos.x : 50;
+              const currentY = curElementPos.y !== undefined ? curElementPos.y : 50;
+              const currentFontSize = curElementPos.fontSize !== undefined ? curElementPos.fontSize : 12;
+              const currentAlign = curElementPos.align || 'center';
+              const activeItemMeta = INSPECTOR_ELEMENTS.find(i => i.key === inspectorElement);
+
+              return (
+                <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                      {activeItemMeta?.icon && <activeItemMeta.icon className="w-3.5 h-3.5 text-sky-400" />}
+                      <span>تعديل: {activeItemMeta?.label}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newPositions = { ...(currentTemplate.positions as any) };
+                        delete newPositions[inspectorElement];
+                        handleUpdateTemplate({ positions: newPositions });
+                      }}
+                      className="text-[10px] text-slate-400 hover:text-amber-300 flex items-center gap-1 transition"
+                      title="استعادة الموقع الافتراضي للعنصر"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>إعادة ضبط الموضع</span>
+                    </button>
+                  </div>
+
+                  {/* Horizontal X Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-300">الموقع الأفقي (X - من اليمين إلى اليسار):</span>
+                      <span className="font-mono text-sky-400 font-bold">{Math.round(currentX)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={95}
+                      step={1}
+                      value={currentX}
+                      onChange={e => updateElementPos(inspectorElement, { x: parseFloat(e.target.value) })}
+                      className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Vertical Y Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-300">الموقع الرأسي (Y - من الأعلى إلى الأسفل):</span>
+                      <span className="font-mono text-emerald-400 font-bold">{Math.round(currentY)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={95}
+                      step={1}
+                      value={currentY}
+                      onChange={e => updateElementPos(inspectorElement, { y: parseFloat(e.target.value) })}
+                      className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Font Size Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-300">حجم الخط / العنصر:</span>
+                      <span className="font-mono text-amber-400 font-bold">{currentFontSize} px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={6}
+                      max={32}
+                      step={0.5}
+                      value={currentFontSize}
+                      onChange={e => updateElementPos(inspectorElement, { fontSize: parseFloat(e.target.value) })}
+                      className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Alignment buttons */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-slate-300">محاذاة النص:</span>
+                    <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                      {[
+                        { align: 'right', label: 'يمين', icon: AlignRight },
+                        { align: 'center', label: 'وسط', icon: AlignCenter },
+                        { align: 'left', label: 'يسار', icon: AlignLeft }
+                      ].map(a => (
+                        <button
+                          key={a.align}
+                          type="button"
+                          onClick={() => updateElementPos(inspectorElement, { align: a.align as any })}
+                          className={`p-1.5 rounded text-xs transition flex items-center gap-1 ${
+                            currentAlign === a.align
+                              ? 'bg-sky-600 text-white font-bold shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title={`محاذاة ${a.label}`}
+                        >
+                          <a.icon className="w-3.5 h-3.5" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* 3. SECTION: Toggles Grid for Visible Fields */}
+          <div className="border-t border-slate-800 pt-3">
+            <span className="text-xs font-bold text-slate-300 block mb-2">
+              تفعيل أو إخفاء حقول وبيانات الكرت:
+            </span>
+            <div className="grid grid-cols-2 gap-2 text-xs">
             <label className="flex items-center gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
               <input
                 type="checkbox"
@@ -1644,6 +2062,7 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               <span className="text-slate-200">رقم الدفعة (Batch)</span>
             </label>
           </div>
+        </div>
 
           {/* Card Creation Date Field */}
           <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">

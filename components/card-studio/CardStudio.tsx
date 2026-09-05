@@ -10,8 +10,15 @@ import { StudioControlPanel } from './StudioControlPanel';
 import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store';
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { saveTemplateToFirestore, loadTemplatesFromFirestore, deleteTemplateFromFirestore } from '@/lib/firestore-service';
-import { exportCardElementAsPng, exportTemplateBackgroundAsPng } from '@/lib/export-image';
-import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from '@/lib/routeros-utils';
+import { exportCardElementAsPng, exportTemplateBackgroundAsPng, exportCardWithFallback } from '@/lib/export-image';
+import {
+  formatByteLimit,
+  formatUptimeLimit,
+  sanitizeRouterOSComment,
+  sanitizeRouterOSValue,
+  sanitizeRouterOSIdentifier
+} from '@/lib/routeros-utils';
+import { copyTextToClipboard } from '@/lib/utils';
 import {
   FileDown,
   Printer,
@@ -108,7 +115,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     } catch (e) {
       console.warn('Could not read cached templates from localStorage', e);
     }
-  }, [tenant.id]);
+  }, [tenant.id, LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY]);
 
   // Load custom templates from Firestore on mount
   useEffect(() => {
@@ -130,7 +137,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [tenant.id]);
+  }, [tenant.id, LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY]);
 
   // Auto-switch to the template linked to this profile if available
   useEffect(() => {
@@ -143,7 +150,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       setSuccessMessage(`تم تفعيل القالب المعتمد تلقائياً: "${linkedTpl.name}" لباقة ${prof?.name || ''}`);
       setTimeout(() => setSuccessMessage(null), 3500);
     }
-  }, [selectedProfileId, templates]);
+  }, [selectedProfileId, templates, profiles, selectedTemplateId]);
 
   // File Upload & Drag-and-Drop state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -497,7 +504,15 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     setShowImageExportDropdown(false);
     try {
       const cleanName = (currentTemplate.name || 'Card').replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, '_');
-      const success = await exportCardElementAsPng('main-card-preview-container', `NetFlow_${cleanName}_Card.png`, 3);
+      const cardToExport = activeCards[0] || (sampleCard as Card);
+      const success = await exportCardWithFallback({
+        card: cardToExport,
+        template: currentTemplate,
+        tenant,
+        elementOrId: 'universal-card-export-target',
+        fileName: `NetFlow_${cleanName}_Card.png`,
+        scale: 3
+      });
       if (success) {
         setSuccessMessage('تم حفظ الكرت كصورة عالية الدقة (300 DPI) على جهازك بنجاح!');
         setTimeout(() => setSuccessMessage(null), 4000);
@@ -608,61 +623,121 @@ export const CardStudio: React.FC<CardStudioProps> = ({
 
   // MikroTik Script Generator by flavor
   const getMikroTikScript = (flavor: string, cards: Card[], profileName?: string) => {
-    const pName = profileName || 'default';
-    if (flavor === 'userman_v7') {
-      let script = `# NetFlow SaaS - MikroTik RouterOS v7 User Manager Script\n`;
-      script += `# Total Vouchers: ${cards.length} | Profile: ${pName} | Date: ${new Date().toISOString()}\n\n`;
+    const pName = profileName || (cards[0]?.profileName ? cards[0].profileName.split(' ')[0] : 'default');
+    const cleanProf = sanitizeRouterOSIdentifier(pName, 'default');
+
+    if (flavor === 'hotspot_v7') {
+      let script = `# ==========================================================\n`;
+      script += `# NetFlow SaaS - MikroTik RouterOS v7 Hotspot Script (/ip hotspot user)\n`;
+      script += `# Total Vouchers: ${cards.length} | Profile: ${cleanProf} | Date: ${new Date().toLocaleString('ar-EG')}\n`;
+      script += `# Hardened: RouterOS Injection Protected & Standalone Commands\n`;
+      script += `# ==========================================================\n\n`;
       cards.forEach(c => {
-        script += `/user-manager user add name="${c.code}" password="${c.password || c.code}" group="${pName}" comment="NetFlow-${c.batchNumber || 'B-101'}"\n`;
+        const username = sanitizeRouterOSValue(c.code, 40);
+        const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
+        const cardProf = sanitizeRouterOSIdentifier(c.profileName?.split(' ')[0] || cleanProf, 'default');
+        const limitBytes = c.byteDisplay ? formatByteLimit(c.byteDisplay) : '0';
+        const limitUptime = c.uptimeDisplay ? formatUptimeLimit(c.uptimeDisplay) : '0';
+        const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
+        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"\n`;
       });
       return script;
     }
-    if (flavor === 'userman_v6') {
-      let script = `# NetFlow SaaS - MikroTik RouterOS v6 User Manager Script\n`;
-      script += `# Total Vouchers: ${cards.length} | Profile: ${pName} | Date: ${new Date().toISOString()}\n\n`;
-      cards.forEach(c => {
-        script += `/tool user-manager user add username="${c.code}" password="${c.password || c.code}" customer=admin comment="NetFlow-${c.batchNumber || 'B-101'}"\n`;
-        script += `/tool user-manager user create-and-activate-profile "${c.code}" profile="${pName}" customer=admin\n`;
-      });
-      return script;
-    }
+
     if (flavor === 'hotspot_v6') {
-      let script = `# NetFlow SaaS - MikroTik RouterOS v6 Hotspot Script\n`;
-      script += `# Total Vouchers: ${cards.length} | Profile: ${pName} | Date: ${new Date().toISOString()}\n\n`;
+      let script = `# ==========================================================\n`;
+      script += `# NetFlow SaaS - MikroTik RouterOS v6 Hotspot Script (/ip hotspot user)\n`;
+      script += `# Total Vouchers: ${cards.length} | Profile: ${cleanProf} | Date: ${new Date().toLocaleString('ar-EG')}\n`;
+      script += `# ==========================================================\n\n`;
       cards.forEach(c => {
-        script += `/ip hotspot user add name="${c.code}" password="${c.password || c.code}" profile="${pName}" comment="NetFlow-${c.batchNumber || 'B-101'}"\n`;
+        const username = sanitizeRouterOSValue(c.code, 40);
+        const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
+        const cardProf = sanitizeRouterOSIdentifier(c.profileName?.split(' ')[0] || cleanProf, 'default');
+        const limitBytes = c.byteDisplay ? formatByteLimit(c.byteDisplay) : '0';
+        const limitUptime = c.uptimeDisplay ? formatUptimeLimit(c.uptimeDisplay) : '0';
+        const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
+        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} comment="${batchId}"\n`;
       });
       return script;
     }
-    // Default: RouterOS v7 Hotspot
-    return generateRouterOSTerminalScript(cards, pName);
+
+    if (flavor === 'userman_v7') {
+      let script = `# ==========================================================\n`;
+      script += `# NetFlow SaaS - MikroTik RouterOS v7 User Manager Script (/user-manager)\n`;
+      script += `# Total Vouchers: ${cards.length} | Profile: ${cleanProf} | Date: ${new Date().toLocaleString('ar-EG')}\n`;
+      script += `# ==========================================================\n\n`;
+      cards.forEach(c => {
+        const username = sanitizeRouterOSValue(c.code, 40);
+        const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
+        const group = sanitizeRouterOSIdentifier(cleanProf, 'default');
+        const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
+        script += `/user-manager user add name="${username}" password="${password}" group="${group}" comment="${batchId}"\n`;
+      });
+      return script;
+    }
+
+    if (flavor === 'userman_v6') {
+      let script = `# ==========================================================\n`;
+      script += `# NetFlow SaaS - MikroTik RouterOS v6 User Manager Script (/tool user-manager)\n`;
+      script += `# Total Vouchers: ${cards.length} | Profile: ${cleanProf} | Date: ${new Date().toLocaleString('ar-EG')}\n`;
+      script += `# ==========================================================\n\n`;
+      cards.forEach(c => {
+        const username = sanitizeRouterOSValue(c.code, 40);
+        const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
+        const profile = sanitizeRouterOSIdentifier(cleanProf, 'default');
+        const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
+        script += `/tool user-manager user add username="${username}" password="${password}" customer=admin comment="${batchId}"\n`;
+        script += `/tool user-manager user create-and-activate-profile "${username}" profile="${profile}" customer=admin\n`;
+      });
+      return script;
+    }
+
+    // Default fallback
+    return generateRouterOSTerminalScript(cards, cleanProf);
   };
 
   // Copy MikroTik Script
-  const handleCopyMikroTikScript = () => {
+  const handleCopyMikroTikScript = async () => {
+    if (activeCards.length === 0) {
+      alert('لا توجد كروت جاهزة حالياً لنسخ السكربت!');
+      return;
+    }
     const script = getMikroTikScript(scriptFlavor, activeCards, selectedProfile?.name);
-    navigator.clipboard.writeText(script);
-    setCopiedScript(true);
-    setSuccessMessage('تم نسخ أوامر وسكريبت المايكروتك بنجاح!');
-    setTimeout(() => {
-      setCopiedScript(false);
-      setSuccessMessage(null);
-    }, 3000);
+    const success = await copyTextToClipboard(script);
+    if (success) {
+      setCopiedScript(true);
+      const flavorName = 
+        scriptFlavor === 'hotspot_v7' ? 'RouterOS v7 Hotspot' :
+        scriptFlavor === 'hotspot_v6' ? 'RouterOS v6 Hotspot' :
+        scriptFlavor === 'userman_v7' ? 'User Manager v7' : 'User Manager v6';
+      setSuccessMessage(`تم نسخ أوامر وسكريبت المايكروتك بنجاح (${flavorName}) لعدد ${activeCards.length} كرت!`);
+      setTimeout(() => {
+        setCopiedScript(false);
+        setSuccessMessage(null);
+      }, 3500);
+    } else {
+      alert('تعذر النسخ التلقائي للحافظة. يمكنك استخدام زر "تنزيل ملف .rsc" للحصول على الملف مباشرة.');
+    }
   };
 
   // Download .rsc file for MikroTik
   const handleDownloadRsc = () => {
+    if (activeCards.length === 0) {
+      alert('لا توجد كروت جاهزة للتنزيل!');
+      return;
+    }
     const script = getMikroTikScript(scriptFlavor, activeCards, selectedProfile?.name);
     const blob = new Blob([script], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `netflow_${selectedProfile?.name || 'cards'}_${scriptFlavor}.rsc`;
+    const safeProf = selectedProfile?.name ? selectedProfile.name.replace(/[^a-zA-Z0-9_\u0621-\u064A]/g, '_') : 'cards';
+    a.download = `netflow_${safeProf}_${scriptFlavor}.rsc`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setSuccessMessage('تم تنزيل ملف أوامر المايكروتك .rsc بنجاح!');
+    setSuccessMessage(`تم تنزيل ملف أوامر المايكروتك (${scriptFlavor}) بنجاح!`);
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
@@ -893,6 +968,8 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             onExportCardImage={handleExportCardAsImage}
             onExportBackgroundImage={handleExportBackgroundAsImage}
             isExportingImage={isExportingImage}
+            previewMode={previewMode}
+            setPreviewMode={setPreviewMode}
           />
         </div>
 
@@ -1005,15 +1082,24 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             />
           )}
 
-          {/* Offscreen element for reliable image export even when preview is in A4 or Designer mode */}
-          {activeCards[0] && (
+          {/* Universal export element for 100% reliable image export in any preview mode (A4, Single, Designer) */}
+          {(activeCards[0] || sampleCard) && (
             <div
-              id="offscreen-card-export-target"
-              style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '380px', pointerEvents: 'none' }}
+              id="universal-card-export-wrapper"
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '380px',
+                opacity: 0,
+                pointerEvents: 'none',
+                zIndex: -9999
+              }}
               aria-hidden="true"
             >
               <CardPreview
-                card={activeCards[0]}
+                id="universal-card-export-target"
+                card={activeCards[0] || (sampleCard as Card)}
                 template={currentTemplate}
                 tenant={tenant}
                 isZoomed={true}
@@ -1073,7 +1159,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    تحديث القالب الحالي ("{currentTemplate.name}")
+                    تحديث القالب الحالي (&quot;{currentTemplate.name}&quot;)
                   </button>
                   <button
                     type="button"

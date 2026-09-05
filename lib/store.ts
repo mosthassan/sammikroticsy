@@ -865,15 +865,16 @@ export {
 
 // RouterOS Script Generators
 export function generateRouterOSTerminalScript(cards: Card[], profileName: string = ''): string {
+  const pName = profileName || (cards[0]?.profileName ? cards[0].profileName.split(' ')[0] : 'default');
+  const cleanProf = sanitizeRouterOSIdentifier(pName, 'default');
   const lines: string[] = [
     `# ==========================================================`,
     `# NetFlow SaaS - MikroTik Hotspot User Import Script (/ip hotspot user)`,
     `# Generated At: ${new Date().toLocaleString('ar-EG')}`,
-    `# Total Users: ${cards.length}`,
+    `# Total Users: ${cards.length} | Profile: ${cleanProf}`,
     `# Note: Username = Password or separate PIN supported 100%`,
-    `# Hardened: RouterOS Injection Protected`,
+    `# Hardened: RouterOS Injection Protected & Standalone Commands`,
     `# ==========================================================`,
-    `/ip hotspot user`
   ];
 
   for (const card of cards) {
@@ -882,12 +883,14 @@ export function generateRouterOSTerminalScript(cards: Card[], profileName: strin
 
     const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const rawProf = profileName || card.profileName.split(' ')[0] || 'default';
-    const cleanProf = sanitizeRouterOSIdentifier(rawProf, 'default');
-    const comment = sanitizeRouterOSComment(`NetFlow_${card.batchNumber}_${card.price}`);
+    const cardProf = profileName || card.profileName?.split(' ')[0] || 'default';
+    const prof = sanitizeRouterOSIdentifier(cardProf, 'default');
+    const batchId = sanitizeRouterOSComment(card.batchNumber ? `NetFlow-${card.batchNumber}` : `NetFlow_${card.price}`);
+    const limitBytes = card.byteDisplay ? formatByteLimit(card.byteDisplay) : '0';
+    const limitUptime = card.uptimeDisplay ? formatUptimeLimit(card.uptimeDisplay) : '0';
     
-    // MikroTik standard /ip hotspot user add name="xxx" password="xxx" profile="xxx" comment="xxx"
-    lines.push(`add name="${safeCode}" password="${safePwd}" profile="${cleanProf}" comment="${comment}"`);
+    // MikroTik RouterOS v7 standard: /ip hotspot user add ...
+    lines.push(`/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`);
   }
 
   return lines.join('\n');
