@@ -47,6 +47,109 @@ function drawDashedRect(
   ctx.restore();
 }
 
+// Vector icon drawing helpers matching UI preview for high-res PDF print
+function drawClockIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, size * 0.12);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.42, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy - size * 0.22);
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + size * 0.16, cy);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawHardDriveIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1, size * 0.1);
+  const w = size * 0.85;
+  const h = size * 0.65;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  drawRoundedRect(ctx, x, y, w, h, size * 0.12, false, true);
+  ctx.beginPath();
+  ctx.moveTo(x, y + h * 0.65);
+  ctx.lineTo(x + w, y + h * 0.65);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.78, y + h * 0.82, size * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWifiIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1, size * 0.12);
+  ctx.lineCap = 'round';
+  const baseY = cy + size * 0.25;
+  ctx.beginPath();
+  ctx.arc(cx, baseY, size * 0.48, -Math.PI * 0.75, -Math.PI * 0.25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, baseY, size * 0.28, -Math.PI * 0.75, -Math.PI * 0.25);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, baseY - size * 0.02, size * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCalendarIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, size * 0.1);
+  ctx.lineCap = 'round';
+  const w = size * 0.8;
+  const h = size * 0.75;
+  const x = cx - w / 2;
+  const y = cy - h / 2 + size * 0.06;
+  drawRoundedRect(ctx, x, y, w, h, size * 0.12, false, true);
+  ctx.beginPath();
+  ctx.moveTo(x, y + h * 0.35);
+  ctx.lineTo(x + w, y + h * 0.35);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.26, y - size * 0.08);
+  ctx.lineTo(x + w * 0.26, y + size * 0.06);
+  ctx.moveTo(x + w * 0.74, y - size * 0.08);
+  ctx.lineTo(x + w * 0.74, y + size * 0.06);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPhoneIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, size * 0.11);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const s = size * 0.42;
+  ctx.beginPath();
+  ctx.arc(cx, cy + size * 0.08, s, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  const leftX = cx + Math.cos(Math.PI * 1.15) * s;
+  const leftY = cy + size * 0.08 + Math.sin(Math.PI * 1.15) * s;
+  const rightX = cx + Math.cos(Math.PI * 1.85) * s;
+  const rightY = cy + size * 0.08 + Math.sin(Math.PI * 1.85) * s;
+  ctx.beginPath();
+  ctx.arc(leftX, leftY, size * 0.1, 0, Math.PI * 2);
+  ctx.arc(rightX, rightY, size * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // Helper to draw custom styled price tag
 function drawStyledPriceTag(
   ctx: CanvasRenderingContext2D,
@@ -482,8 +585,15 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `800 ${Math.round(Math.max(3.2, (p.fontSize || 11) * 0.38) * dpiScale * autoScale)}px ${fontStack}`;
-          ctx.fillText(tenant.businessName, posX, posY + 3.2 * dpiScale, cardW * 0.55);
+          const fontPx = Math.round(Math.max(3.2, (p.fontSize || 11) * 0.38) * dpiScale * autoScale);
+          ctx.font = `800 ${fontPx}px ${fontStack}`;
+          if (template.showIcons !== false) {
+            const iconSize = fontPx * 0.85;
+            drawWifiIcon(ctx, posX - iconSize * 0.5, posY + 1.8 * dpiScale, iconSize, '#38bdf8');
+            ctx.fillText(tenant.businessName, posX - iconSize * 1.3, posY + 3.2 * dpiScale, cardW * 0.52);
+          } else {
+            ctx.fillText(tenant.businessName, posX, posY + 3.2 * dpiScale, cardW * 0.55);
+          }
           ctx.restore();
         }
 
@@ -517,8 +627,15 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = isDarkCard ? '#a5f3fc' : '#0284c7';
-          ctx.font = `600 ${Math.round(Math.max(2.1, (p.fontSize || 7.5) * 0.35) * dpiScale * autoScale)}px monospace, ${fontStack}`;
-          ctx.fillText(formattedDateStr, posX, posY + 2.5 * dpiScale);
+          const fontPx = Math.round(Math.max(2.1, (p.fontSize || 7.5) * 0.35) * dpiScale * autoScale);
+          ctx.font = `600 ${fontPx}px monospace, ${fontStack}`;
+          if (template.showIcons !== false) {
+            const iconSize = fontPx * 0.9;
+            drawCalendarIcon(ctx, posX - iconSize * 0.5, posY + 1.2 * dpiScale, iconSize, isDarkCard ? '#94a3b8' : '#64748b');
+            ctx.fillText(formattedDateStr, posX - iconSize * 1.3, posY + 2.5 * dpiScale);
+          } else {
+            ctx.fillText(formattedDateStr, posX, posY + 2.5 * dpiScale);
+          }
           ctx.restore();
         }
 
@@ -629,8 +746,8 @@ export async function generateCardsPdf(
           ctx.restore();
         }
 
-        // Uptime & Byte Limit (High Contrast White / Black)
-        if (template.showUptime || template.showByteLimit) {
+        // Uptime (Duration)
+        if (template.showUptime) {
           const p = getCustomPos('uptime');
           const posX = cardX + cardW - ((p.x ?? 5) / 100) * cardW;
           const posY = cardY + ((p.y ?? 88) / 100) * cardH;
@@ -638,27 +755,82 @@ export async function generateCardsPdf(
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
           ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
-          ctx.font = `700 ${Math.round(Math.max(2.4, (p.fontSize || 8) * 0.36) * dpiScale * autoScale)}px ${fontStack}`;
-          const metaText = `الصلاحية: ${card.uptimeDisplay} | الرصيد: ${card.byteDisplay}`;
-          ctx.fillText(metaText, posX, posY + 2 * dpiScale);
+          const fontPx = Math.round(Math.max(2.4, (p.fontSize || 8) * 0.36) * dpiScale * autoScale);
+          ctx.font = `700 ${fontPx}px ${fontStack}`;
+          if (template.showIcons !== false) {
+            const iconSize = fontPx * 0.9;
+            drawClockIcon(ctx, posX - iconSize * 0.5, posY + 1.2 * dpiScale, iconSize, '#38bdf8');
+            ctx.fillText(card.uptimeDisplay, posX - iconSize * 1.3, posY + 2.2 * dpiScale);
+          } else {
+            ctx.fillText(`الصلاحية: ${card.uptimeDisplay}`, posX, posY + 2.2 * dpiScale);
+          }
           ctx.restore();
         }
 
-        // Support Phone / Footer
-        const pFoot = getCustomPos('footerText');
-        const footX = cardX + cardW / 2;
-        const footY = cardY + ((pFoot.y ?? 94) / 100) * cardH;
-        ctx.save();
-        ctx.direction = 'rtl';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = isDarkCard ? '#f1f5f9' : '#1e293b';
-        ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px ${fontStack}`;
-        const phoneText = template.supportPhoneText || tenant.phone;
-        const footerText = template.customFooter 
-          ? `${template.customFooter} • هاتف: ${phoneText}`
-          : `تسجيل الدخول: ${tenant.settings?.loginDomain || 'wifi.samtech.net'} • هاتف الدعم: ${phoneText}`;
-        ctx.fillText(footerText, footX, footY, cardW - 4 * dpiScale);
-        ctx.restore();
+        // Byte Limit (Quota)
+        if (template.showByteLimit) {
+          const p = getCustomPos('byteLimit');
+          const posX = cardX + cardW - ((p.x ?? 30) / 100) * cardW;
+          const posY = cardY + ((p.y ?? 88) / 100) * cardH;
+          ctx.save();
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
+          ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
+          const fontPx = Math.round(Math.max(2.4, (p.fontSize || 8) * 0.36) * dpiScale * autoScale);
+          ctx.font = `700 ${fontPx}px ${fontStack}`;
+          if (template.showIcons !== false) {
+            const iconSize = fontPx * 0.9;
+            drawHardDriveIcon(ctx, posX - iconSize * 0.5, posY + 1.2 * dpiScale, iconSize, '#34d399');
+            ctx.fillText(card.byteDisplay, posX - iconSize * 1.3, posY + 2.2 * dpiScale);
+          } else {
+            ctx.fillText(`الرصيد: ${card.byteDisplay}`, posX, posY + 2.2 * dpiScale);
+          }
+          ctx.restore();
+        }
+
+        // Support Phone Number (Mobile)
+        if (template.showSupportPhone) {
+          const phoneVal = template.supportPhoneText !== undefined ? template.supportPhoneText : tenant.phone;
+          if (phoneVal) {
+            const p = getCustomPos('supportPhone');
+            const posX = cardX + cardW - ((p.x ?? 55) / 100) * cardW;
+            const posY = cardY + ((p.y ?? 88) / 100) * cardH;
+            ctx.save();
+            ctx.direction = 'rtl';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#fcd34d';
+            const fontPx = Math.round(Math.max(2.2, (p.fontSize || 7.5) * 0.35) * dpiScale * autoScale);
+            ctx.font = `700 ${fontPx}px monospace, ${fontStack}`;
+            if (template.showIcons !== false) {
+              const iconSize = fontPx * 0.9;
+              drawPhoneIcon(ctx, posX - iconSize * 0.5, posY + 1.2 * dpiScale, iconSize, '#f59e0b');
+              ctx.fillText(phoneVal, posX - iconSize * 1.3, posY + 2.2 * dpiScale);
+            } else {
+              ctx.fillText(`هاتف: ${phoneVal}`, posX, posY + 2.2 * dpiScale);
+            }
+            ctx.restore();
+          }
+        }
+
+        // Custom Footer / Slogan Banner
+        if (template.showCustomFooter !== false && template.customFooter && template.customFooter.trim()) {
+          const pFoot = getCustomPos('footerText');
+          const footX = cardX + cardW - ((pFoot.x ?? 50) / 100) * cardW;
+          const footY = cardY + ((pFoot.y ?? 94) / 100) * cardH;
+          ctx.save();
+          ctx.direction = 'rtl';
+          ctx.textAlign = pFoot.align || 'center';
+          ctx.fillStyle = isDarkCard ? '#f1f5f9' : '#1e293b';
+          const fontPx = Math.round(Math.max(2.0, (pFoot.fontSize || 7) * 0.35) * dpiScale * autoScale);
+          ctx.font = `600 ${fontPx}px ${fontStack}`;
+          let footerText = template.customFooter.trim();
+          if (template.includePhoneInFooter && template.showSupportPhone) {
+            const phoneVal = template.supportPhoneText !== undefined ? template.supportPhoneText : tenant.phone;
+            if (phoneVal) footerText += ` • هاتف: ${phoneVal}`;
+          }
+          ctx.fillText(footerText, footX, footY, cardW - 4 * dpiScale);
+          ctx.restore();
+        }
 
       } else {
         const isCompactStrip = (cardH / dpiScale) <= 22;
@@ -750,13 +922,22 @@ export async function generateCardsPdf(
           );
 
           // Meta below code box
-          if (template.showUptime || template.showByteLimit) {
+          if (template.showUptime || template.showByteLimit || template.showSupportPhone) {
             ctx.save();
             ctx.direction = 'rtl';
             ctx.textAlign = 'center';
             ctx.fillStyle = template.metaIconsColor || (isDarkCard ? '#94a3b8' : '#64748b');
             ctx.font = `600 ${Math.round(1.8 * dpiScale * autoScale)}px ${fontStack}`;
-            ctx.fillText(`${card.uptimeDisplay} • ${card.byteDisplay}`, centerLeft + centerW / 2, codeY + codeH + 2.0 * dpiScale * autoScale);
+            const parts: string[] = [];
+            if (template.showUptime) parts.push(card.uptimeDisplay);
+            if (template.showByteLimit) parts.push(card.byteDisplay);
+            if (template.showSupportPhone) {
+              const phoneVal = template.supportPhoneText || tenant.phone;
+              if (phoneVal) parts.push(phoneVal);
+            }
+            if (parts.length > 0) {
+              ctx.fillText(parts.join(' • '), centerLeft + centerW / 2, codeY + codeH + 2.0 * dpiScale * autoScale);
+            }
             ctx.restore();
           }
 
@@ -797,10 +978,17 @@ export async function generateCardsPdf(
             ctx.direction = 'rtl';
             ctx.textAlign = 'right';
             ctx.fillStyle = template.networkNameColor || (isDarkCard ? '#ffffff' : '#0f172a');
-            ctx.font = `800 ${Math.round(Math.max(3.2, (template.fontSizeTitle || 11) * 0.38) * dpiScale * autoScale)}px ${fontStack}`;
+            const fontPx = Math.round(Math.max(3.2, (template.fontSizeTitle || 11) * 0.38) * dpiScale * autoScale);
+            ctx.font = `800 ${fontPx}px ${fontStack}`;
             const titleX = innerRight;
             const titleY = topY + 3.2 * dpiScale * autoScale;
-            ctx.fillText(tenant.businessName, titleX, titleY, cardW * 0.55);
+            if (template.showIcons !== false) {
+              const iconSize = fontPx * 0.85;
+              drawWifiIcon(ctx, titleX - iconSize * 0.5, titleY - 1.2 * dpiScale, iconSize, '#38bdf8');
+              ctx.fillText(tenant.businessName, titleX - iconSize * 1.3, titleY, cardW * 0.52);
+            } else {
+              ctx.fillText(tenant.businessName, titleX, titleY, cardW * 0.55);
+            }
             ctx.restore();
           }
 
@@ -810,8 +998,15 @@ export async function generateCardsPdf(
             ctx.direction = 'rtl';
             ctx.textAlign = 'right';
             ctx.fillStyle = template.dateBadgeColor || (isDarkCard ? '#a5f3fc' : '#0284c7');
-            ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px monospace, ${fontStack}`;
-            ctx.fillText(`تأريخ: ${formattedDateStr}`, innerRight, topY + 6.6 * dpiScale * autoScale, cardW * 0.45);
+            const fontPx = Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale);
+            ctx.font = `600 ${fontPx}px monospace, ${fontStack}`;
+            if (template.showIcons !== false) {
+              const iconSize = fontPx * 0.9;
+              drawCalendarIcon(ctx, innerRight - iconSize * 0.5, topY + 5.5 * dpiScale * autoScale, iconSize, isDarkCard ? '#94a3b8' : '#64748b');
+              ctx.fillText(formattedDateStr, innerRight - iconSize * 1.3, topY + 6.6 * dpiScale * autoScale, cardW * 0.45);
+            } else {
+              ctx.fillText(`تأريخ: ${formattedDateStr}`, innerRight, topY + 6.6 * dpiScale * autoScale, cardW * 0.45);
+            }
             ctx.restore();
           }
 
@@ -915,29 +1110,70 @@ export async function generateCardsPdf(
             currentItemY += 3.4 * dpiScale * autoScale;
           }
 
-          // Limits: Time & Quota (High-Contrast White on Dark / Black on Light)
-          ctx.save();
-          ctx.direction = 'rtl';
-          ctx.textAlign = 'right';
-          ctx.fillStyle = template.metaIconsColor || (isDarkCard ? '#ffffff' : '#0f172a');
-          ctx.font = `700 ${Math.round(Math.max(2.4, 2.6 * autoScale) * dpiScale)}px ${fontStack}`;
-          const metaText = `الصلاحية: ${card.uptimeDisplay} | الرصيد: ${card.byteDisplay}`;
-          ctx.fillText(metaText, contentRight, currentItemY + 2.0 * dpiScale * autoScale, contentWidth);
-          ctx.restore();
+          // Limits: Time, Quota, & Support Phone
+          if (template.showUptime || template.showByteLimit || template.showSupportPhone) {
+            ctx.save();
+            ctx.direction = 'rtl';
+            ctx.textAlign = 'right';
+            const fontPx = Math.round(Math.max(2.4, 2.6 * autoScale) * dpiScale);
+            ctx.font = `700 ${fontPx}px ${fontStack}`;
 
-          // Bottom Bar / Footer info inside card (High-Contrast Legibility)
-          const footerY = cardY + cardH - 2.2 * dpiScale * autoScale;
-          ctx.save();
-          ctx.direction = 'rtl';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = template.metaIconsColor || (isDarkCard ? '#f1f5f9' : '#1e293b');
-          ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px ${fontStack}`;
-          const phoneText = template.supportPhoneText || tenant.phone;
-          const footerText = template.customFooter 
-            ? `${template.customFooter} • هاتف: ${phoneText}`
-            : `تسجيل الدخول: ${tenant.settings?.loginDomain || 'wifi.samtech.net'} • هاتف الدعم: ${phoneText}`;
-          ctx.fillText(footerText, cardX + cardW / 2, footerY, cardW - 4 * dpiScale);
-          ctx.restore();
+            if (template.showIcons !== false) {
+              let curX = contentRight;
+              const itemY = currentItemY + 2.0 * dpiScale * autoScale;
+              if (template.showUptime) {
+                const iconSize = fontPx * 0.85;
+                drawClockIcon(ctx, curX - iconSize * 0.5, itemY - fontPx * 0.35, iconSize, '#38bdf8');
+                ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
+                ctx.fillText(card.uptimeDisplay, curX - iconSize * 1.2, itemY);
+                curX -= ctx.measureText(card.uptimeDisplay).width + iconSize * 2.2;
+              }
+              if (template.showByteLimit) {
+                const iconSize = fontPx * 0.85;
+                drawHardDriveIcon(ctx, curX - iconSize * 0.5, itemY - fontPx * 0.35, iconSize, '#34d399');
+                ctx.fillStyle = isDarkCard ? '#ffffff' : '#0f172a';
+                ctx.fillText(card.byteDisplay, curX - iconSize * 1.2, itemY);
+                curX -= ctx.measureText(card.byteDisplay).width + iconSize * 2.2;
+              }
+              if (template.showSupportPhone) {
+                const phoneVal = template.supportPhoneText !== undefined ? template.supportPhoneText : tenant.phone;
+                if (phoneVal) {
+                  const iconSize = fontPx * 0.85;
+                  drawPhoneIcon(ctx, curX - iconSize * 0.5, itemY - fontPx * 0.35, iconSize, '#f59e0b');
+                  ctx.fillStyle = '#fcd34d';
+                  ctx.fillText(phoneVal, curX - iconSize * 1.2, itemY);
+                }
+              }
+            } else {
+              ctx.fillStyle = template.metaIconsColor || (isDarkCard ? '#ffffff' : '#0f172a');
+              const parts: string[] = [];
+              if (template.showUptime) parts.push(`الصلاحية: ${card.uptimeDisplay}`);
+              if (template.showByteLimit) parts.push(`الرصيد: ${card.byteDisplay}`);
+              if (template.showSupportPhone) {
+                const phoneVal = template.supportPhoneText !== undefined ? template.supportPhoneText : tenant.phone;
+                if (phoneVal) parts.push(`هاتف: ${phoneVal}`);
+              }
+              ctx.fillText(parts.join(' | '), contentRight, currentItemY + 2.0 * dpiScale * autoScale, contentWidth);
+            }
+            ctx.restore();
+          }
+
+          // Bottom Bar / Footer banner inside card (respects showCustomFooter)
+          if (template.showCustomFooter !== false && template.customFooter && template.customFooter.trim()) {
+            const footerY = cardY + cardH - 2.2 * dpiScale * autoScale;
+            ctx.save();
+            ctx.direction = 'rtl';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = template.metaIconsColor || (isDarkCard ? '#f1f5f9' : '#1e293b');
+            ctx.font = `600 ${Math.round(Math.max(2.1, 2.3 * autoScale) * dpiScale)}px ${fontStack}`;
+            let footerText = template.customFooter.trim();
+            if (template.includePhoneInFooter && template.showSupportPhone) {
+              const phoneText = template.supportPhoneText !== undefined ? template.supportPhoneText : tenant.phone;
+              if (phoneText) footerText += ` • هاتف: ${phoneText}`;
+            }
+            ctx.fillText(footerText, cardX + cardW / 2, footerY, cardW - 4 * dpiScale);
+            ctx.restore();
+          }
         }
       }
     }

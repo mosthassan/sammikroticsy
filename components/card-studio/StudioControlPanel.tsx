@@ -54,7 +54,13 @@ import {
   AlignCenter,
   AlignLeft,
   RotateCcw,
-  Eye
+  Eye,
+  EyeOff,
+  Phone,
+  MessageSquare,
+  Clock,
+  HardDrive,
+  Wifi
 } from 'lucide-react';
 
 interface StudioControlPanelProps {
@@ -219,16 +225,58 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   const INSPECTOR_ELEMENTS = [
     { key: 'code', label: 'كود الدخول (Code)', icon: Hash },
     { key: 'pin', label: 'الرمز السري (PIN)', icon: KeyRound },
-    { key: 'networkName', label: 'اسم الشبكة', icon: Type },
+    { key: 'networkName', label: 'اسم الشبكة', icon: Wifi },
     { key: 'price', label: 'شارة السعر', icon: Tag },
     { key: 'qr', label: 'رمز الاستجابة (QR)', icon: QrCode },
     { key: 'profileName', label: 'اسم الباقة / الفئة', icon: Sparkles },
-    { key: 'uptime', label: 'الصلاحية (Uptime)', icon: Calendar },
-    { key: 'byteLimit', label: 'رصيد الميغابايت', icon: Maximize2 },
-    { key: 'supportPhone', label: 'هاتف الدعم الفني', icon: Sliders },
+    { key: 'uptime', label: 'الصلاحية (Uptime)', icon: Clock },
+    { key: 'byteLimit', label: 'رصيد الميغابايت', icon: HardDrive },
+    { key: 'supportPhone', label: 'هاتف الدعم (رقم الجوال)', icon: Phone },
+    { key: 'footerText', label: 'شريط التذييل (تغطية واسعة...)', icon: MessageSquare },
     { key: 'serial', label: 'الرقم التسلسلي (SN)', icon: Hash },
     { key: 'createdAt', label: 'تأريخ الطباعة', icon: Calendar }
   ];
+
+  const getElementVisibility = (key: string): boolean => {
+    switch (key) {
+      case 'code': return currentTemplate.showCode !== false;
+      case 'pin': return currentTemplate.showPin !== false;
+      case 'networkName': return currentTemplate.showNetworkName !== false;
+      case 'price': return currentTemplate.showPrice !== false;
+      case 'qr': return currentTemplate.showQr !== false;
+      case 'profileName': return currentTemplate.showProfileName !== false;
+      case 'uptime': return currentTemplate.showUptime !== false;
+      case 'byteLimit': return currentTemplate.showByteLimit !== false;
+      case 'supportPhone': return currentTemplate.showSupportPhone !== false;
+      case 'footerText': return currentTemplate.showCustomFooter !== false && !!(currentTemplate.customFooter && currentTemplate.customFooter.trim());
+      case 'serial': return currentTemplate.showSerialNumber !== false;
+      case 'createdAt': return currentTemplate.showCreatedAt !== false;
+      default: return true;
+    }
+  };
+
+  const toggleElementVisibility = (key: string) => {
+    const current = getElementVisibility(key);
+    switch (key) {
+      case 'code': handleUpdateTemplate({ showCode: !current }); break;
+      case 'pin': handleUpdateTemplate({ showPin: !current }); break;
+      case 'networkName': handleUpdateTemplate({ showNetworkName: !current }); break;
+      case 'price': handleUpdateTemplate({ showPrice: !current }); break;
+      case 'qr': handleUpdateTemplate({ showQr: !current }); break;
+      case 'profileName': handleUpdateTemplate({ showProfileName: !current }); break;
+      case 'uptime': handleUpdateTemplate({ showUptime: !current }); break;
+      case 'byteLimit': handleUpdateTemplate({ showByteLimit: !current }); break;
+      case 'supportPhone': handleUpdateTemplate({ showSupportPhone: !current }); break;
+      case 'footerText':
+        handleUpdateTemplate({
+          showCustomFooter: !current,
+          ...(!current && !currentTemplate.customFooter ? { customFooter: 'تغطية واسعة وسرعات تحميل وتنزيل فائقة' } : {})
+        });
+        break;
+      case 'serial': handleUpdateTemplate({ showSerialNumber: !current }); break;
+      case 'createdAt': handleUpdateTemplate({ showCreatedAt: !current }); break;
+    }
+  };
 
   const updateElementPos = (key: string, updates: Partial<{ x: number; y: number; fontSize: number; align: 'left' | 'center' | 'right' }>) => {
     const currentPositions = (currentTemplate.positions as any) || {};
@@ -1872,6 +1920,7 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               const currentFontSize = curElementPos.fontSize !== undefined ? curElementPos.fontSize : 12;
               const currentAlign = curElementPos.align || 'center';
               const activeItemMeta = INSPECTOR_ELEMENTS.find(i => i.key === inspectorElement);
+              const isElementVisible = getElementVisibility(inspectorElement);
 
               return (
                 <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3 animate-in fade-in">
@@ -1894,6 +1943,133 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                       <span>إعادة ضبط الموضع</span>
                     </button>
                   </div>
+
+                  {/* 1. Element Visibility Toggle */}
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800">
+                    <div className="flex items-center gap-2">
+                      {isElementVisible ? (
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                      )}
+                      <span className="text-[11px] font-medium text-slate-200">
+                        حالة ظهور العنصر في الكرت:
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleElementVisibility(inspectorElement)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                        isElementVisible
+                          ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                          : 'bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{isElementVisible ? 'ظاهر ومفعّل' : 'مخفي (معطّل)'}</span>
+                    </button>
+                  </div>
+
+                  {/* 2. Specific Custom Content Editor for Footer Text */}
+                  {inspectorElement === 'footerText' && (
+                    <div className="space-y-2 p-2.5 bg-slate-950/80 rounded-xl border border-sky-900/40">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" />
+                          <span>نص شريط التذييل / العبارة الترويجية:</span>
+                        </label>
+                        {currentTemplate.customFooter && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTemplate({ customFooter: '', showCustomFooter: false })}
+                            className="text-[10px] text-red-400 hover:text-red-300"
+                          >
+                            مسح النص وإخفاء
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={currentTemplate.customFooter ?? ''}
+                        onChange={e => handleUpdateTemplate({ customFooter: e.target.value, showCustomFooter: true })}
+                        placeholder="مثال: تغطية واسعة وسرعات تحميل وتنزيل فائقة (أو اتركه فارغاً)"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                      />
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        <span className="text-[10px] text-slate-400 w-full">عبارات سريعة بنقرة واحدة:</span>
+                        {[
+                          'تغطية واسعة وسرعات تحميل وتنزيل فائقة',
+                          'امسح الرمز أو سجل الدخول بالمتصفح',
+                          'خدمة إنترنت سريعة ومستقرة 24 ساعة',
+                          'الرمز صالح للاستخدام على جهاز واحد فقط'
+                        ].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => handleUpdateTemplate({ customFooter: preset, showCustomFooter: true })}
+                            className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="flex items-center gap-2 pt-1.5 border-t border-slate-800/80 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={currentTemplate.includePhoneInFooter || false}
+                          onChange={e => handleUpdateTemplate({ includePhoneInFooter: e.target.checked })}
+                          className="accent-sky-500 rounded w-3.5 h-3.5"
+                        />
+                        <span className="text-[10px] text-slate-300">
+                          دمج رقم الهاتف تلقائياً في نهاية شريط التذييل
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* 3. Specific Custom Content Editor for Support Phone */}
+                  {inspectorElement === 'supportPhone' && (
+                    <div className="space-y-2 p-2.5 bg-slate-950/80 rounded-xl border border-amber-900/40">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          <span>رقم هاتف الدعم الفني / الواتساب:</span>
+                        </label>
+                        {tenant.phone && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTemplate({ supportPhoneText: tenant.phone, showSupportPhone: true })}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30"
+                          >
+                            استخدام رقم المنشأة ({tenant.phone})
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={currentTemplate.supportPhoneText !== undefined ? currentTemplate.supportPhoneText : (tenant.phone || '')}
+                        onChange={e => handleUpdateTemplate({ supportPhoneText: e.target.value, showSupportPhone: true })}
+                        placeholder="مثال: 770446040"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono text-left focus:outline-none focus:border-amber-500"
+                        dir="ltr"
+                      />
+                    </div>
+                  )}
+
+                  {/* 4. Specific Custom Content Editor for Created At */}
+                  {inspectorElement === 'createdAt' && (
+                    <div className="space-y-1.5 p-2 bg-slate-950/80 rounded-xl border border-slate-800">
+                      <label className="text-[11px] font-bold text-sky-300 block">صيغة عرض التأريخ:</label>
+                      <select
+                        value={currentTemplate.createdAtFormat || 'short'}
+                        onChange={e => handleUpdateTemplate({ createdAtFormat: e.target.value as any })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100"
+                      >
+                        <option value="short">مختصر (05/09/26)</option>
+                        <option value="date_only">تأريخ فقط (2026/09/05)</option>
+                        <option value="date_time">تأريخ ووقت كامل (2026/09/05 14:30)</option>
+                      </select>
+                    </div>
+                  )}
 
                   {/* Horizontal X Slider */}
                   <div className="space-y-1">
@@ -2061,6 +2237,55 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               />
               <span className="text-slate-200">رقم الدفعة (Batch)</span>
             </label>
+
+            <label className="flex items-center gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+              <input
+                type="checkbox"
+                checked={currentTemplate.showSupportPhone !== false}
+                onChange={e => handleUpdateTemplate({ showSupportPhone: e.target.checked })}
+                className="accent-sky-500 rounded w-4 h-4"
+              />
+              <span className="text-slate-200">هاتف الدعم (رقم الجوال)</span>
+            </label>
+
+            <label className="flex items-center gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700">
+              <input
+                type="checkbox"
+                checked={currentTemplate.showCustomFooter !== false && !!(currentTemplate.customFooter && currentTemplate.customFooter.trim())}
+                onChange={e => handleUpdateTemplate({
+                  showCustomFooter: e.target.checked,
+                  ...(e.target.checked && !currentTemplate.customFooter ? { customFooter: 'تغطية واسعة وسرعات تحميل وتنزيل فائقة' } : {})
+                })}
+                className="accent-sky-500 rounded w-4 h-4"
+              />
+              <span className="text-slate-200">شريط التذييل (العبارة)</span>
+            </label>
+          </div>
+
+          {/* Icons & Visual Symbols Master Toggle */}
+          <div className="mt-3 p-3 bg-slate-950/90 rounded-xl border border-sky-900/30 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">عرض الرموز والأيقونات التوضيحية</span>
+                <span className="text-[10px] text-slate-400 block">
+                  إظهار أيقونات متطابقة في المعاينة والطباعة (🕒 الصلاحية، 💾 الرصيد، 📶 الشبكة، 📞 الهاتف)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleUpdateTemplate({ showIcons: currentTemplate.showIcons === false ? true : false })}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                currentTemplate.showIcons !== false
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              {currentTemplate.showIcons !== false ? 'مفعّلة ومطابقة' : 'نص فقط بدون رموز'}
+            </button>
           </div>
         </div>
 
@@ -2125,40 +2350,112 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
           {/* Support Phone */}
           <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">
             <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs font-bold text-slate-200">عرض هاتف الدعم الفني / الواتساب</span>
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-amber-400" />
+                <span>عرض هاتف الدعم الفني / رقم الجوال</span>
+              </span>
               <input
                 type="checkbox"
-                checked={currentTemplate.showSupportPhone}
+                checked={currentTemplate.showSupportPhone !== false}
                 onChange={e => handleUpdateTemplate({ showSupportPhone: e.target.checked })}
                 className="accent-sky-500 rounded w-4 h-4"
               />
             </label>
-            {currentTemplate.showSupportPhone && (
+            {currentTemplate.showSupportPhone !== false && (
               <div className="pt-2 border-t border-slate-800 space-y-2">
-                <label className="block text-[11px] text-slate-400">رقم الهاتف أو الواتساب للدعم</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] text-slate-400">رقم الهاتف أو الواتساب</label>
+                  {tenant.phone && (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateTemplate({ supportPhoneText: tenant.phone })}
+                      className="text-[10px] text-amber-400 hover:text-amber-300"
+                    >
+                      استعادة رقم المنشأة ({tenant.phone})
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
-                  value={currentTemplate.supportPhoneText || tenant.phone || ''}
+                  value={currentTemplate.supportPhoneText !== undefined ? currentTemplate.supportPhoneText : (tenant.phone || '')}
                   onChange={e => handleUpdateTemplate({ supportPhoneText: e.target.value })}
-                  placeholder="مثال: 770000000"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 font-mono"
+                  placeholder="مثال: 770446040"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 font-mono text-left focus:outline-none focus:border-amber-500"
+                  dir="ltr"
                 />
+                <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={currentTemplate.includePhoneInFooter || false}
+                    onChange={e => handleUpdateTemplate({ includePhoneInFooter: e.target.checked })}
+                    className="accent-sky-500 rounded w-3.5 h-3.5"
+                  />
+                  <span className="text-[11px] text-slate-300">
+                    إلحاق رقم الهاتف بشريط التذييل السفلي
+                  </span>
+                </label>
               </div>
             )}
           </div>
 
-          {/* Custom Footer */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              تذييل الكرت (تعليمات الاستخدام)
+          {/* Custom Footer / Slogan */}
+          <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2.5">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                <span>شريط التذييل (العبارة والتعليمات)</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={currentTemplate.showCustomFooter !== false && !!(currentTemplate.customFooter && currentTemplate.customFooter.trim())}
+                onChange={e => handleUpdateTemplate({
+                  showCustomFooter: e.target.checked,
+                  ...(e.target.checked && !currentTemplate.customFooter ? { customFooter: 'تغطية واسعة وسرعات تحميل وتنزيل فائقة' } : {})
+                })}
+                className="accent-sky-500 rounded w-4 h-4"
+              />
             </label>
-            <input
-              type="text"
-              value={currentTemplate.customFooter || ''}
-              onChange={e => handleUpdateTemplate({ customFooter: e.target.value })}
-              placeholder="اتصل بالشبكة وسجل الدخول"
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
-            />
+
+            {currentTemplate.showCustomFooter !== false && (
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">نص العبارة الترويجية أو التعليمات:</span>
+                  {currentTemplate.customFooter && (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateTemplate({ customFooter: '', showCustomFooter: false })}
+                      className="text-[10px] text-red-400 hover:text-red-300"
+                    >
+                      إفراغ النص وإخفاء التذييل
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={currentTemplate.customFooter ?? ''}
+                  onChange={e => handleUpdateTemplate({ customFooter: e.target.value, showCustomFooter: true })}
+                  placeholder="مثال: تغطية واسعة وسرعات تحميل وتنزيل فائقة"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                />
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {[
+                    'تغطية واسعة وسرعات تحميل وتنزيل فائقة',
+                    'امسح الرمز أو سجل الدخول بالمتصفح',
+                    'خدمة إنترنت سريعة ومستقرة 24 ساعة',
+                    'الرمز صالح للاستخدام على جهاز واحد فقط'
+                  ].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => handleUpdateTemplate({ customFooter: preset, showCustomFooter: true })}
+                      className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ADVANCED ELEMENT SHAPES & STYLING CONTROLS */}

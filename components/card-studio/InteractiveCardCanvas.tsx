@@ -373,7 +373,7 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   isSelected ? 'ring-2 ring-sky-400 bg-sky-500/30 z-30 shadow-lg' : 'hover:ring-1 hover:ring-white/40'
                 }`}
               >
-                <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                {template.showIcons !== false && <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
                 <span className="truncate max-w-[200px]">{tenant.businessName}</span>
               </div>
             );
@@ -421,7 +421,7 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   isSelected ? 'ring-2 ring-sky-400 bg-sky-500/30 z-30' : 'hover:ring-1 hover:ring-white/30'
                 }`}
               >
-                <Calendar className="w-2.5 h-2.5 text-sky-300" />
+                {template.showIcons !== false && <Calendar className="w-2.5 h-2.5 text-sky-300" />}
                 <span>{formattedDate}</span>
               </div>
             );
@@ -590,7 +590,7 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   isSelected ? 'ring-2 ring-sky-400 bg-sky-500/20 z-30' : 'hover:ring-1 hover:ring-white/20'
                 }`}
               >
-                <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                {template.showIcons !== false && <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />}
                 <span>{card.uptimeDisplay}</span>
               </div>
             );
@@ -613,7 +613,7 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   isSelected ? 'ring-2 ring-emerald-400 bg-emerald-500/20 z-30' : 'hover:ring-1 hover:ring-white/20'
                 }`}
               >
-                <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                {template.showIcons !== false && <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
                 <span>{card.byteDisplay}</span>
               </div>
             );
@@ -636,16 +636,20 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   isSelected ? 'ring-2 ring-amber-400 bg-amber-500/20 z-30' : 'hover:ring-1 hover:ring-white/20'
                 }`}
               >
-                <Phone className="w-2 h-2 text-amber-400" />
+                {template.showIcons !== false && <Phone className="w-2 h-2 text-amber-400" />}
                 <span>{supportNumber}</span>
               </div>
             );
           })()}
 
-          {/* 12. Footer / Login Instructions */}
-          {(() => {
+          {/* 12. Footer / Custom Slogan Banner */}
+          {(template.showCustomFooter !== false && template.customFooter && template.customFooter.trim()) && (() => {
             const p = getPos('footerText');
             const isSelected = selectedElement === 'footerText';
+            let footerText = template.customFooter.trim();
+            if (template.includePhoneInFooter && template.showSupportPhone) {
+              footerText += ` • هاتف: ${supportNumber}`;
+            }
             return (
               <div
                 onMouseDown={e => handleMouseDown(e, 'footerText')}
@@ -655,11 +659,11 @@ export const InteractiveCardCanvas: React.FC<InteractiveCardCanvasProps> = ({
                   top: `${p.y}%`,
                   fontSize: `${p.fontSize || 7}px`
                 }}
-                className={`text-slate-400 font-light cursor-move px-1 py-0.5 rounded truncate max-w-[180px] transition ${
+                className={`text-slate-400 font-light cursor-move px-1 py-0.5 rounded truncate max-w-[200px] transition ${
                   isSelected ? 'ring-2 ring-sky-400 bg-sky-500/20 z-30' : 'hover:ring-1 hover:ring-white/20'
                 }`}
               >
-                {template.customFooter || 'اتصل بالشبكة وسجل الدخول'}
+                {footerText}
               </div>
             );
           })()}

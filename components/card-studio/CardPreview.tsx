@@ -175,7 +175,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className="flex items-center gap-1 font-bold z-10 drop-shadow-sm"
             >
-              <Wifi className="w-3 h-3 text-sky-400 shrink-0" />
+              {template.showIcons !== false && <Wifi className="w-3 h-3 text-sky-400 shrink-0" />}
               <span className="truncate max-w-[140px]">{tenant.businessName}</span>
             </div>
           );
@@ -226,7 +226,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className="px-1.5 py-0.5 rounded font-mono flex items-center gap-0.5 z-10"
             >
-              <Calendar className="w-2 h-2 text-sky-300" />
+              {template.showIcons !== false && <Calendar className="w-2 h-2 text-sky-300" />}
               <span>{formattedDate}</span>
             </div>
           );
@@ -403,7 +403,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className="flex items-center gap-0.5 font-bold z-10"
             >
-              <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+              {template.showIcons !== false && <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" />}
               <span>{card.uptimeDisplay}</span>
             </div>
           );
@@ -423,7 +423,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className="flex items-center gap-0.5 font-bold z-10"
             >
-              <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+              {template.showIcons !== false && <HardDrive className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
               <span>{card.byteDisplay}</span>
             </div>
           );
@@ -442,15 +442,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               }}
               className="flex items-center gap-0.5 text-amber-300 font-bold font-mono z-10"
             >
-              <Phone className="w-2 h-2 text-amber-400" />
+              {template.showIcons !== false && <Phone className="w-2 h-2 text-amber-400" />}
               <span>{supportNumber}</span>
             </div>
           );
         })()}
 
         {/* 12. Footer */}
-        {(() => {
+        {(template.showCustomFooter !== false && template.customFooter && template.customFooter.trim()) && (() => {
           const p = getPos('footerText');
+          let footerText = template.customFooter.trim();
+          if (template.includePhoneInFooter && template.showSupportPhone) {
+            footerText += ` • هاتف: ${supportNumber}`;
+          }
           return (
             <div
               style={{
@@ -459,9 +463,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                 top: `${p.y}%`,
                 fontSize: `${(p.fontSize || 7) * autoScale}px`
               }}
-              className={`font-medium truncate max-w-[140px] z-10 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
+              className={`font-medium truncate max-w-[160px] z-10 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
             >
-              {template.customFooter || 'اتصل بالشبكة وسجل الدخول'}
+              {footerText}
             </div>
           );
         })()}
@@ -676,9 +680,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         }`}
       >
         <div className="flex items-center gap-1 min-w-0">
-          <div className="w-4 h-4 rounded-md bg-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
-            <Wifi className="w-2.5 h-2.5" />
-          </div>
+          {template.showIcons !== false && (
+            <div className="w-4 h-4 rounded-md bg-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+              <Wifi className="w-2.5 h-2.5" />
+            </div>
+          )}
           {template.showNetworkName && (
             <span 
               style={{ 
@@ -703,7 +709,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
               className="px-1 py-0.5 rounded bg-white/10 font-mono flex items-center gap-0.5" 
               title="تأريخ الإنشاء"
             >
-              <Calendar className="w-2 h-2 text-sky-300" />
+              {template.showIcons !== false && <Calendar className="w-2 h-2 text-sky-300" />}
               <span>{formattedDate}</span>
             </span>
           )}
@@ -863,27 +869,30 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
         <div className="flex items-center gap-1.5 font-bold">
           {template.showUptime && (
             <div className="flex items-center gap-0.5">
-              <Clock className="w-2 h-2 text-sky-400" />
+              {template.showIcons !== false && <Clock className="w-2 h-2 text-sky-400" />}
               <span>{card.uptimeDisplay}</span>
             </div>
           )}
           {template.showByteLimit && (
             <div className="flex items-center gap-0.5">
-              <HardDrive className="w-2 h-2 text-emerald-400" />
+              {template.showIcons !== false && <HardDrive className="w-2 h-2 text-emerald-400" />}
               <span>{card.byteDisplay}</span>
             </div>
           )}
           {template.showSupportPhone && (
             <div className="flex items-center gap-0.5 text-amber-300">
-              <Phone className="w-2 h-2 text-amber-400" />
+              {template.showIcons !== false && <Phone className="w-2 h-2 text-amber-400" />}
               <span className="font-mono">{supportNumber}</span>
             </div>
           )}
         </div>
 
-        <div className={`font-medium truncate max-w-[110px] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-          {template.customFooter || 'اتصل بالشبكة وسجل الدخول'}
-        </div>
+        {template.showCustomFooter !== false && template.customFooter && template.customFooter.trim() ? (
+          <div className={`font-medium truncate max-w-[140px] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+            {template.customFooter.trim()}
+            {template.includePhoneInFooter && template.showSupportPhone ? ` • هاتف: ${supportNumber}` : ''}
+          </div>
+        ) : null}
       </div>
     </div>
   );

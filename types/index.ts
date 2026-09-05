@@ -238,6 +238,9 @@ export interface CardTemplate {
   showBatchNumber?: boolean;
   showSupportPhone?: boolean;
   showCreatedAt?: boolean;
+  showCustomFooter?: boolean;
+  showIcons?: boolean;
+  includePhoneInFooter?: boolean;
   createdAtFormat?: 'date_only' | 'date_time' | 'short';
   supportPhoneText?: string;
   scratchText?: string;
