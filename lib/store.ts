@@ -1030,10 +1030,13 @@ export function generateRouterOSCleanupScript(
 }
 
 export function generateRouterOSFetchPollingScript(tenant: Tenant): string {
-  const token = tenant.settings.syncToken || 'nf_sec_token';
+  const token = tenant.settings.syncToken || 'sam_sec_89df24a67e12c4';
   const autoCleanup = tenant.settings.autoCleanupExpiredUsers ? '&cleanup=true' : '';
   const retention = tenant.settings.cleanupRetentionPolicy ? `&retention=${tenant.settings.cleanupRetentionPolicy}` : '';
-  const apiEndpoint = `https://netflow-saas.cloud/api/mikrotik/sync?token=${token}${autoCleanup}${retention}`;
+  const baseUrl = (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost'))
+    ? window.location.origin
+    : (process.env.APP_URL || 'https://ais-dev-iaagkplbn2n4og7vmqgpia-180820475420.europe-west2.run.app');
+  const apiEndpoint = `${baseUrl}/api/mikrotik/sync?token=${token}${autoCleanup}${retention}`;
 
   return `# ==========================================================
 # NetFlow SaaS - Auto-Fetch Polling Script for MikroTik RouterOS

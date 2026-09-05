@@ -12,9 +12,50 @@ export function sanitizeRouterOSValue(val: unknown, maxLen = 64): string {
 
 export function sanitizeRouterOSIdentifier(val: unknown, fallback = 'default', maxLen = 32): string {
   if (val === null || val === undefined) return fallback;
-  const str = String(val);
-  const clean = str.replace(/[^a-zA-Z0-9_\-\.]/g, '_').trim().slice(0, maxLen);
-  return clean || fallback;
+  const str = String(val).trim();
+  if (!str) return fallback;
+
+  // Replace invalid characters with underscore, collapse consecutive underscores, and strip edges
+  const clean = str
+    .replace(/[^a-zA-Z0-9_\-\.]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .trim()
+    .slice(0, maxLen);
+
+  // If the result has no letters or digits, or consists purely of symbols, fallback immediately
+  if (!clean || !/[a-zA-Z0-9]/.test(clean)) {
+    return fallback;
+  }
+
+  return clean;
+}
+
+// Strictly resolves and validates MikroTik Hotspot User Profile names
+// Guarantees that Arabic strings or corrupt identifiers never output "___" or "____200",
+// falling back safely to "default" so RouterOS never rejects the user creation command.
+export function resolveRouterOSProfile(val: unknown, fallback = 'default'): string {
+  if (val === null || val === undefined) return fallback;
+  const str = String(val).trim();
+  if (!str) return fallback;
+
+  // If the profile string contains Arabic characters, check for an embedded Latin identifier,
+  // otherwise fallback safely to 'default' (which is guaranteed to exist in every RouterOS installation)
+  if (/[\u0600-\u06FF]/.test(str)) {
+    const englishMatch = str.match(/[a-zA-Z][a-zA-Z0-9_\-\.]{1,31}/);
+    if (englishMatch) {
+      return englishMatch[0];
+    }
+    return fallback;
+  }
+
+  const sanitized = sanitizeRouterOSIdentifier(str, fallback, 32);
+  // Ensure it doesn't look like an accidental underscore artifact (e.g. "___" or "____200")
+  if (/^[_.\-]+$/.test(sanitized) || /^_{2,}/.test(sanitized)) {
+    return fallback;
+  }
+
+  return sanitized || fallback;
 }
 
 export function sanitizeRouterOSComment(val: unknown, maxLen = 80): string {

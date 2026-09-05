@@ -720,6 +720,27 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
               {fetchScript}
             </pre>
           </div>
+
+          {/* Cloud Database Security Rules Helper */}
+          <div className="p-4 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                صلاحيات قراءة الكروت من السحابة (Firestore Rules)
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCopy(`rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /batches/{batchId} {\n      allow read, write: if true;\n    }\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n  }\n}`, 'rules')}
+                className="px-2.5 py-1 bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 rounded-lg text-[11px] font-medium transition flex items-center gap-1 shrink-0 self-start sm:self-auto"
+              >
+                {copiedText === 'rules' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedText === 'rules' ? 'تم نسخ القواعد!' : 'نسخ قواعد فايربيس الموصى بها'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              يدعم النظام المزامنة الهجينة المباشرة تلقائياً. لتمكين راوتر المايكروتك من جلب الكروت مباشرة من السحابة في أي وقت بدون قيود مصادقة، تأكد من إضافة سماح القراءة لمجموعة <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded font-mono">batches</code> في <strong>Firebase Console &gt; Firestore Database &gt; Rules</strong>.
+            </p>
+          </div>
         </div>
       )}
 

@@ -16,7 +16,8 @@ import {
   formatUptimeLimit,
   sanitizeRouterOSComment,
   sanitizeRouterOSValue,
-  sanitizeRouterOSIdentifier
+  sanitizeRouterOSIdentifier,
+  resolveRouterOSProfile
 } from '@/lib/routeros-utils';
 import { copyTextToClipboard } from '@/lib/utils';
 import {
@@ -561,7 +562,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       const formattedCards = previewBatchData.cards.map(c => {
         const uName = c.code;
         const pwd = c.password || c.code;
-        const prof = selectedProfile?.name || c.profileName || 'default';
+        const prof = resolveRouterOSProfile(selectedProfile?.name || c.profileName, 'default');
         const bLimit = formatByteLimit(selectedProfile?.byteLimit || c.byteDisplay);
         const uLimit = formatUptimeLimit(selectedProfile?.uptimeLimit || c.uptimeDisplay);
         const comment = sanitizeRouterOSComment(`NetFlow_${batchNumber}_${c.price || 0}`);
@@ -624,7 +625,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   // MikroTik Script Generator by flavor
   const getMikroTikScript = (flavor: string, cards: Card[], profileName?: string) => {
     const pName = profileName || (cards[0]?.profileName ? cards[0].profileName.split(' ')[0] : 'default');
-    const cleanProf = sanitizeRouterOSIdentifier(pName, 'default');
+    const cleanProf = resolveRouterOSProfile(pName, 'default');
 
     if (flavor === 'hotspot_v7') {
       let script = `# ==========================================================\n`;
@@ -635,7 +636,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       cards.forEach(c => {
         const username = sanitizeRouterOSValue(c.code, 40);
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
-        const cardProf = sanitizeRouterOSIdentifier(c.profileName?.split(' ')[0] || cleanProf, 'default');
+        const cardProf = resolveRouterOSProfile(c.profileName?.split(' ')[0] || cleanProf, 'default');
         const limitBytes = c.byteDisplay ? formatByteLimit(c.byteDisplay) : '0';
         const limitUptime = c.uptimeDisplay ? formatUptimeLimit(c.uptimeDisplay) : '0';
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
@@ -652,7 +653,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       cards.forEach(c => {
         const username = sanitizeRouterOSValue(c.code, 40);
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
-        const cardProf = sanitizeRouterOSIdentifier(c.profileName?.split(' ')[0] || cleanProf, 'default');
+        const cardProf = resolveRouterOSProfile(c.profileName?.split(' ')[0] || cleanProf, 'default');
         const limitBytes = c.byteDisplay ? formatByteLimit(c.byteDisplay) : '0';
         const limitUptime = c.uptimeDisplay ? formatUptimeLimit(c.uptimeDisplay) : '0';
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
@@ -669,7 +670,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       cards.forEach(c => {
         const username = sanitizeRouterOSValue(c.code, 40);
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
-        const group = sanitizeRouterOSIdentifier(cleanProf, 'default');
+        const group = resolveRouterOSProfile(cleanProf, 'default');
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
         script += `/user-manager user add name="${username}" password="${password}" group="${group}" comment="${batchId}"\n`;
       });
@@ -684,7 +685,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       cards.forEach(c => {
         const username = sanitizeRouterOSValue(c.code, 40);
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
-        const profile = sanitizeRouterOSIdentifier(cleanProf, 'default');
+        const profile = resolveRouterOSProfile(cleanProf, 'default');
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
         script += `/tool user-manager user add username="${username}" password="${password}" customer=admin comment="${batchId}"\n`;
         script += `/tool user-manager user create-and-activate-profile "${username}" profile="${profile}" customer=admin\n`;

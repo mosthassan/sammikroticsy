@@ -538,6 +538,24 @@ export async function saveBatchAndCards(
       await writeChunk.commit();
     }
 
+    // 4. Also register in Hybrid Server Sync Store for instant zero-latency MikroTik polling
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/mikrotik/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'register_batch',
+            batch: cardBatch,
+            cards: formattedCards,
+            token: activeToken
+          })
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-blocking
+    }
+
     return { success: true };
   } catch (error: any) {
     console.warn('Firestore saveBatchAndCards note:', error?.message || error);
