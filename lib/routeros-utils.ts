@@ -32,30 +32,48 @@ export function sanitizeRouterOSIdentifier(val: unknown, fallback = 'default', m
 }
 
 // Strictly resolves and validates MikroTik Hotspot User Profile names
-// Guarantees that Arabic strings or corrupt identifiers never output "___" or "____200",
-// falling back safely to "default" so RouterOS never rejects the user creation command.
+// Guarantees that Arabic strings, numbers, or corrupt placeholders (e.g. "___" or "____200")
+// never break the RouterOS import command, defaulting safely to "default".
 export function resolveRouterOSProfile(val: unknown, fallback = 'default'): string {
   if (val === null || val === undefined) return fallback;
   const str = String(val).trim();
   if (!str) return fallback;
 
-  // If the profile string contains Arabic characters, check for an embedded Latin identifier,
-  // otherwise fallback safely to 'default' (which is guaranteed to exist in every RouterOS installation)
+  // Strict check: if explicitly 'default', return immediately
+  if (str.toLowerCase() === 'default') return 'default';
+
+  // Detect underscore placeholders or artifacts like "___", "____200", "_200", etc.
+  if (str.includes('__') || /^[_.\-]+/.test(str) || /[_.\-]+$/.test(str)) {
+    return fallback;
+  }
+
+  // Purely numeric strings (e.g., "200", "500", "1000") represent card prices/denominations,
+  // NOT RouterOS user profiles. Default to 'default' so RouterOS doesn't reject import.
+  if (/^\d+$/.test(str)) {
+    return fallback;
+  }
+
+  // If the profile string contains Arabic characters, it's a display/marketing name (e.g. "كرت أبو 200" or "باقة 1 جيجا")
+  // In our architecture, speed profiles are handled dynamically on the login page by the user,
+  // so every generated voucher MUST strictly default to the standard 'default' profile unless a valid profile name is explicitly assigned.
   if (/[\u0600-\u06FF]/.test(str)) {
-    const englishMatch = str.match(/[a-zA-Z][a-zA-Z0-9_\-\.]{1,31}/);
-    if (englishMatch) {
-      return englishMatch[0];
-    }
     return fallback;
   }
 
+  // Sanitize the identifier
   const sanitized = sanitizeRouterOSIdentifier(str, fallback, 32);
-  // Ensure it doesn't look like an accidental underscore artifact (e.g. "___" or "____200")
-  if (/^[_.\-]+$/.test(sanitized) || /^_{2,}/.test(sanitized)) {
+
+  // RouterOS profile names MUST start with an English letter [a-zA-Z]
+  if (!/^[a-zA-Z][a-zA-Z0-9_\-\.]{1,31}$/.test(sanitized)) {
     return fallback;
   }
 
-  return sanitized || fallback;
+  // Reject if it's purely underscores or invalid artifacts
+  if (/^[_.\-]+$/.test(sanitized)) {
+    return fallback;
+  }
+
+  return sanitized;
 }
 
 export function sanitizeRouterOSComment(val: unknown, maxLen = 80): string {

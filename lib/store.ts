@@ -860,13 +860,14 @@ export {
   sanitizeRouterOSIdentifier,
   sanitizeRouterOSComment,
   formatByteLimit,
-  formatUptimeLimit
+  formatUptimeLimit,
+  resolveRouterOSProfile
 } from './routeros-utils';
 
 // RouterOS Script Generators
 export function generateRouterOSTerminalScript(cards: Card[], profileName: string = ''): string {
-  const pName = profileName || (cards[0]?.profileName ? cards[0].profileName.split(' ')[0] : 'default');
-  const cleanProf = sanitizeRouterOSIdentifier(pName, 'default');
+  const pName = profileName || (cards[0]?.profileName ? cards[0].profileName : 'default');
+  const cleanProf = resolveRouterOSProfile(pName, 'default');
   const lines: string[] = [
     `# ==========================================================`,
     `# NetFlow SaaS - MikroTik Hotspot User Import Script (/ip hotspot user)`,
@@ -883,8 +884,7 @@ export function generateRouterOSTerminalScript(cards: Card[], profileName: strin
 
     const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const cardProf = profileName || card.profileName?.split(' ')[0] || 'default';
-    const prof = sanitizeRouterOSIdentifier(cardProf, 'default');
+    const prof = resolveRouterOSProfile(profileName || card.profileName, 'default');
     const batchId = sanitizeRouterOSComment(card.batchNumber ? `NetFlow-${card.batchNumber}` : `NetFlow_${card.price}`);
     const limitBytes = card.byteDisplay ? formatByteLimit(card.byteDisplay) : '0';
     const limitUptime = card.uptimeDisplay ? formatUptimeLimit(card.uptimeDisplay) : '0';
@@ -914,8 +914,7 @@ export function generateUserManagerV6Script(cards: Card[], customer: string = 'a
 
     const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const rawProf = card.profileName.split(' ')[0] || 'default';
-    const cleanProf = sanitizeRouterOSIdentifier(rawProf, 'default');
+    const cleanProf = resolveRouterOSProfile(card.profileName, 'default');
     const comment = sanitizeRouterOSComment(`NetFlow_${card.batchNumber}`);
     
     lines.push(`add customer="${safeCustomer}" username="${safeCode}" password="${safePwd}" comment="${comment}"`);

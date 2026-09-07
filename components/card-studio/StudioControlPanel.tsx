@@ -48,6 +48,7 @@ import {
   Bookmark,
   BookmarkCheck,
   BookmarkPlus,
+  Copy,
   Move,
   RefreshCw,
   AlignRight,
@@ -89,6 +90,7 @@ interface StudioControlPanelProps {
   isSavingToFirestore: boolean;
   isSavedInFirestore: boolean;
   onOpenSaveModal?: (mode?: 'new' | 'update') => void;
+  onOpenCloneModal?: (sourceTemplateId?: string) => void;
   onDeleteCustomTemplate?: (templateId: string, name: string) => void;
   aiPrompt: string;
   setAiPrompt: (p: string) => void;
@@ -144,6 +146,7 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
   isSavingToFirestore,
   isSavedInFirestore,
   onOpenSaveModal,
+  onOpenCloneModal,
   onDeleteCustomTemplate,
   aiPrompt,
   setAiPrompt,
@@ -578,13 +581,13 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
               </div>
             </div>
 
-            {/* Template Selector Dropdown & Save Button */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            {/* Template Selector Dropdown & Save / Clone Buttons */}
+            <div className="space-y-2">
               <select
                 id="select-package-template"
                 value={selectedTemplateId}
                 onChange={e => setSelectedTemplateId(e.target.value)}
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500 transition font-sans"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500 transition font-sans"
               >
                 {customSavedTemplates.length > 0 && (
                   <optgroup label="🌟 قوالبي المحفوظة المخصصة للباقات">
@@ -604,16 +607,29 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 </optgroup>
               </select>
 
-              <button
-                type="button"
-                id="quick-save-named-template-btn"
-                onClick={() => onOpenSaveModal?.(currentTemplate.isCustom ? 'update' : 'new')}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95"
-                title="تسمية وحفظ هذا التنسيق كقالب للباقة ليتم مزامنته سحابياً واستخدامه دائماً"
-              >
-                <BookmarkPlus className="w-3.5 h-3.5" />
-                <span>{currentTemplate.isCustom ? 'تحديث / حفظ باسم' : 'حفظ وتسمية القالب للباقة'}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  id="quick-save-named-template-btn"
+                  onClick={() => onOpenSaveModal?.(currentTemplate.isCustom ? 'update' : 'new')}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95"
+                  title="تسمية وحفظ هذا التنسيق كقالب للباقة ليتم مزامنته سحابياً واستخدامه دائماً"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                  <span>{currentTemplate.isCustom ? 'تحديث / حفظ باسم' : 'حفظ وتسمية القالب للباقة'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="quick-clone-template-btn"
+                  onClick={() => onOpenCloneModal?.(selectedTemplateId)}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-sky-950/90 hover:bg-sky-900 border border-sky-500/50 text-sky-200 hover:text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95"
+                  title="استنساخ تصميم ومواضع عناصر هذا القالب إلى فئة أو باقة أخرى مباشرة (مثال: من كرت 200 إلى كرت 500)"
+                >
+                  <Copy className="w-3.5 h-3.5 text-sky-400" />
+                  <span>📋 استنساخ التنسيق لفئة أخرى</span>
+                </button>
+              </div>
             </div>
 
             {/* Current Template Status Indicator */}
@@ -1074,6 +1090,18 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 </button>
               )}
 
+              {/* Clone Template Button */}
+              <button
+                type="button"
+                id="clone-template-top-btn"
+                onClick={() => onOpenCloneModal?.(selectedTemplateId)}
+                className="px-3 py-1.5 rounded-xl border border-sky-500/50 bg-sky-950/70 hover:bg-sky-900 text-sky-200 font-bold text-xs transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                title="استنساخ تصميم وتنسيق أي قالب وتطبيقه على فئة/باقة أخرى"
+              >
+                <Copy className="w-3.5 h-3.5 text-sky-400" />
+                <span>📋 استنساخ لفئة أخرى</span>
+              </button>
+
               {/* Save Template to Firestore with Custom Name */}
               <button
                 type="button"
@@ -1114,6 +1142,17 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                     <span>تحديث التعديلات</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  id="open-clone-template-modal-btn"
+                  onClick={() => onOpenCloneModal?.(currentTemplate.id)}
+                  className="px-3 py-1.5 rounded-xl bg-sky-950 hover:bg-sky-900 border border-sky-500/40 text-sky-200 font-bold text-xs transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                  title="استنساخ وتطبيق تصميم ومواضع عناصر هذا القالب على باقة أو فئة أخرى"
+                >
+                  <Copy className="w-3.5 h-3.5 text-sky-400" />
+                  <span>📋 استنساخ لباقة أخرى</span>
+                </button>
 
                 <button
                   type="button"
@@ -1178,6 +1217,17 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
+                              onOpenCloneModal?.(tpl.id);
+                            }}
+                            className="p-1 text-slate-400 hover:text-sky-300 hover:bg-sky-500/10 rounded-md transition cursor-pointer"
+                            title="استنساخ تصميم هذا القالب لفئة أخرى"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               onDeleteCustomTemplate?.(tpl.id, tpl.name);
                             }}
                             className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition cursor-pointer"
@@ -1196,11 +1246,20 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                         <div className="w-2" style={{ backgroundColor: tpl.badgeBg || '#f59e0b' }} />
                       </div>
 
-                      {/* Bottom row: Load Button */}
+                      {/* Bottom row: Load & Clone Buttons */}
                       <div className="flex items-center justify-between pt-1 text-[10px]">
-                        <span className="text-slate-400 font-mono">
-                          {tpl.cardsPerRow * tpl.cardsPerCol} كرت/A4
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCloneModal?.(tpl.id);
+                          }}
+                          className="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                          title="استنساخ تصميم ومواضع هذا القالب لفئة أو باقة أخرى"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>استنساخ لفئة أخرى</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => setSelectedTemplateId(tpl.id)}

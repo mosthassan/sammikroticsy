@@ -2,11 +2,12 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Card, CardBatch, CardTemplate, Profile, Tenant, CodeCharSet } from '@/types';
-import { DEFAULT_TEMPLATES, svgToDataUri } from '@/lib/templates';
+import { DEFAULT_TEMPLATES, COLOR_SCHEME_PRESETS, svgToDataUri } from '@/lib/templates';
 import { CardPreview } from './CardPreview';
 import { A4SheetPreview } from './A4SheetPreview';
 import { InteractiveCardCanvas } from './InteractiveCardCanvas';
 import { StudioControlPanel } from './StudioControlPanel';
+import { CloneTemplateModal } from './CloneTemplateModal';
 import { generateBatchCards, generateRouterOSTerminalScript } from '@/lib/store';
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { saveTemplateToFirestore, loadTemplatesFromFirestore, deleteTemplateFromFirestore } from '@/lib/firestore-service';
@@ -37,6 +38,7 @@ import {
   Cloud,
   Sparkles,
   Tag,
+  Copy,
   X
 } from 'lucide-react';
 
@@ -83,6 +85,11 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [templateLinkedProfileId, setTemplateLinkedProfileId] = useState<string>('');
   const [saveAsMode, setSaveAsMode] = useState<'new' | 'update'>('new');
   const [isSavingCustomTemplate, setIsSavingCustomTemplate] = useState<boolean>(false);
+
+  // Clone Template Modal State
+  const [isCloneModalOpen, setIsCloneModalOpen] = useState<boolean>(false);
+  const [cloneSourceTemplateId, setCloneSourceTemplateId] = useState<string>('');
+  const [isCloningTemplate, setIsCloningTemplate] = useState<boolean>(false);
 
   // AI Template Generator State
   const [aiPrompt, setAiPrompt] = useState<string>('');
@@ -422,6 +429,106 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     } catch (err: any) {
       console.error('Error deleting custom template:', err);
       alert('فشل حذف القالب');
+    }
+  };
+
+  // Open Clone Template Modal
+  const handleOpenCloneModal = (sourceTemplateId?: string) => {
+    setCloneSourceTemplateId(sourceTemplateId || selectedTemplateId || currentTemplate.id);
+    setIsCloneModalOpen(true);
+  };
+
+  // Confirm Template Cloning & Reuse across categories/profiles
+  const handleConfirmClone = async (params: {
+    sourceTemplateId: string;
+    targetProfileId?: string;
+    newTemplateName: string;
+    colorPresetId?: string;
+  }) => {
+    setIsCloningTemplate(true);
+    try {
+      const source = templates.find(t => t.id === params.sourceTemplateId) || currentTemplate;
+      const targetProf = profiles.find(p => p.id === params.targetProfileId);
+      
+      const newTemplateId = `tpl_user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      
+      // Determine colors
+      let bgGradientStart = source.bgGradientStart;
+      let bgGradientEnd = source.bgGradientEnd;
+      let accentColor = source.accentColor;
+      let badgeBg = source.badgeBg;
+      let textColor = source.textColor;
+      let patternStyle = source.patternStyle;
+
+      if (params.colorPresetId) {
+        const preset = COLOR_SCHEME_PRESETS.find(p => p.id === params.colorPresetId);
+        if (preset) {
+          bgGradientStart = preset.bgGradientStart;
+          bgGradientEnd = preset.bgGradientEnd;
+          accentColor = preset.accentColor;
+          badgeBg = preset.badgeBg;
+          textColor = preset.textColor;
+          if (preset.patternStyle) patternStyle = preset.patternStyle;
+        }
+      }
+
+      // Clone elements with exact positions, styling, and geometry
+      const clonedElements = JSON.parse(JSON.stringify(source.elements || []));
+
+      const clonedTemplate: CardTemplate = {
+        ...source,
+        id: newTemplateId,
+        name: params.newTemplateName,
+        isCustom: true,
+        savedByUser: true,
+        linkedProfileId: params.targetProfileId || undefined,
+        linkedProfileName: targetProf?.name || undefined,
+        bgGradientStart,
+        bgGradientEnd,
+        accentColor,
+        badgeBg,
+        textColor,
+        patternStyle,
+        elements: clonedElements,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Update local state
+      setTemplates(prev => {
+        const next = [clonedTemplate, ...prev.filter(t => t.id !== newTemplateId)];
+        try {
+          const customs = next.filter(t => t.isCustom || t.savedByUser);
+          localStorage.setItem(LOCAL_STORAGE_CUSTOM_TEMPLATES_KEY, JSON.stringify(customs));
+        } catch (err) {}
+        return next;
+      });
+
+      // 2. Select the newly cloned template and switch to target profile
+      setSelectedTemplateId(newTemplateId);
+      if (params.targetProfileId) {
+        setSelectedProfileId(params.targetProfileId);
+      }
+
+      // 3. Persist to Firestore
+      const res = await saveTemplateToFirestore(tenant.id, clonedTemplate);
+      if (!res.success) {
+        console.warn('Firestore template save warning:', res.error);
+      }
+
+      // 4. Notify parent
+      if (onSaveTemplate) {
+        await onSaveTemplate(clonedTemplate);
+      }
+
+      setIsCloneModalOpen(false);
+      setSuccessMessage(`تم استنساخ التصميم بنجاح وتطبيقه على "${params.newTemplateName}"!`);
+      setTimeout(() => setSuccessMessage(null), 4500);
+    } catch (err: any) {
+      console.error('Error cloning template:', err);
+      alert(err?.message || 'حدث خطأ أثناء استنساخ القالب');
+    } finally {
+      setIsCloningTemplate(false);
     }
   };
 
@@ -944,6 +1051,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             isSavingToFirestore={isSavingToFirestore}
             isSavedInFirestore={isSavedInFirestore}
             onOpenSaveModal={handleOpenSaveModal}
+            onOpenCloneModal={handleOpenCloneModal}
             onDeleteCustomTemplate={handleDeleteCustomTemplate}
             aiPrompt={aiPrompt}
             setAiPrompt={setAiPrompt}
@@ -1311,6 +1419,20 @@ export const CardStudio: React.FC<CardStudioProps> = ({
           </div>
         </div>
       )}
+
+      {/* Clone & Reuse Template across Categories / Profiles Modal */}
+      <CloneTemplateModal
+        isOpen={isCloneModalOpen}
+        onClose={() => setIsCloneModalOpen(false)}
+        templates={templates}
+        currentTemplate={currentTemplate}
+        initialSourceTemplateId={cloneSourceTemplateId}
+        profiles={profiles}
+        selectedProfileId={selectedProfileId}
+        tenant={tenant}
+        onConfirmClone={handleConfirmClone}
+        isCloning={isCloningTemplate}
+      />
     </div>
   );
 };
