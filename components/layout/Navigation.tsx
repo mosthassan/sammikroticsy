@@ -28,8 +28,10 @@ import {
   Smartphone,
   LogOut,
   Crown,
-  Zap
+  Zap,
+  Download
 } from 'lucide-react';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 interface NavigationProps {
   activeTab: string;
@@ -65,6 +67,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onLogout
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const { isInstalled: isPWAInstalled, resetPrompt } = usePWAInstall();
 
   const isSuperAdmin =
     currentUser?.role === 'super_admin' ||
@@ -315,6 +318,25 @@ export const Navigation: React.FC<NavigationProps> = ({
               </div>
               <span className="text-[10px] text-sky-400 underline">تبديل</span>
             </button>
+
+            {/* Mobile PWA Install Button */}
+            {!isPWAInstalled && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  resetPrompt();
+                }}
+                className="w-full flex items-center justify-between p-2.5 bg-gradient-to-r from-sky-950/60 to-emerald-950/60 border border-sky-500/40 rounded-xl text-xs font-bold text-sky-300 mt-2 hover:bg-sky-900/40 transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <span>تثبيت التطبيق على الشاشة الرئيسية</span>
+                </div>
+                <span className="px-2 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full font-bold">
+                  تثبيت 📱
+                </span>
+              </button>
+            )}
 
             {/* Mobile Logout Button */}
             <button

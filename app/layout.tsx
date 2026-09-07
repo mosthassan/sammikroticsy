@@ -1,6 +1,7 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Cairo, Alexandria, Readex_Pro, Tajawal } from 'next/font/google';
 import './globals.css';
+import { PWAInstallPrompt } from '@/components/pwa/PWAInstallPrompt';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -30,11 +31,25 @@ const tajawal = Tajawal({
   variable: '--font-tajawal'
 });
 
+export const viewport: Viewport = {
+  themeColor: '#020617',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export const metadata: Metadata = {
   title: 'سام تك لإدارة الشبكات - نظام إدارة وتوزيع كروت شبكات المايكروتك',
   description: 'نظام سحابي متكامل لإدارة شبكات المايكروتك، تصميم وطباعة كروت الإنترنت بدقة A4، إدارة المخزون ونقاط البيع، والتحصيل المالي والمزامنة الذكية.',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/icon.svg',
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'سام تك',
   },
 };
 
@@ -47,6 +62,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl" className={`dark ${cairo.variable} ${alexandria.variable} ${readexPro.variable} ${tajawal.variable}`}>
       <body suppressHydrationWarning className="font-cairo bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-sky-500 selection:text-white">
         {children}
+        <PWAInstallPrompt />
       </body>
     </html>
   );
