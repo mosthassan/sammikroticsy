@@ -1048,7 +1048,7 @@ export default function Home() {
 
       {/* Unobtrusive Floating Production Ready / Reset Badge in Corner */}
       {isOwner && activeTab !== 'super_admin' && (
-        <aside aria-label="أزرار تهيئة الشبكة السريعة" className="fixed bottom-5 left-5 z-40 flex items-center gap-2 print:hidden">
+        <aside aria-label="أزرار تهيئة الشبكة السريعة" className="fixed bottom-5 right-5 z-30 flex items-center gap-2 print:hidden">
           {!appState.tenant.isProductionReady ? (
             <button
               onClick={() => setIsCleanModalOpen(true)}

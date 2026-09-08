@@ -4,9 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardBatch, Profile, Tenant, CardTemplate } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { generateCardsPdf } from '@/lib/pdf-generator';
-import { generateRouterOSTerminalScript } from '@/lib/store';
+import { generateRouterOSTerminalScript, DEFAULT_TEMPLATES } from '@/lib/store';
 import { copyTextToClipboard, downloadTextFile } from '@/lib/utils';
-import { fetchCardsForBatch } from '@/lib/firestore-service';
 import {
   Layers,
   Search,
@@ -60,33 +59,55 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [scriptModalData, setScriptModalData] = useState<{ batch: CardBatch; script: string; count: number } | null>(null);
   const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
-  // Filtered Cards
-  const filteredCards = useMemo(() => {
-    return cards.filter(c => {
-      if (selectedBatchId !== 'all' && c.batchId !== selectedBatchId) return false;
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchCode = c.code.toLowerCase().includes(q);
-        const matchBatch = c.batchNumber.toLowerCase().includes(q);
-        const matchAgent = c.assignedToAgentName?.toLowerCase().includes(q);
-        const matchProfile = c.profileName.toLowerCase().includes(q);
-        return matchCode || matchBatch || matchAgent || matchProfile;
-      }
-      return true;
-    });
-  }, [cards, selectedBatchId, statusFilter, searchQuery]);
+  // Helper function to reliably match a card to its batch across all ID formats
+  const matchCardToBatch = (c: Card, batch: CardBatch): boolean => {
+    if (!c || !batch) return false;
 
-  // Multi-tier resolver to guarantee retrieving or reconstructing cards for any batch
-  const resolveBatchCards = async (batch: CardBatch): Promise<Card[]> => {
-    // Tier 1: Search in local props cards array
-    const matched = cards.filter(c => 
-      c.batchId === batch.id || 
-      c.batchId === batch.batchId || 
-      (batch.batchNumber && c.batchNumber === batch.batchNumber) ||
-      (batch.batchNumber && c.batchId === batch.batchNumber) ||
-      c.batchId === `batch_${batch.batchNumber}`
-    );
+    const bId = String(batch.id || '').trim();
+    const bBatchId = String(batch.batchId || '').trim();
+    const bNum = String(batch.batchNumber || '').trim();
+    const bNumClean = bNum.replace(/^B-?/i, '').trim();
+
+    const cBatchId = String(c.batchId || '').trim();
+    const cBatchNum = String(c.batchNumber || '').trim();
+    const cBatchNumClean = cBatchNum.replace(/^B-?/i, '').trim();
+    const cId = String(c.id || '').trim();
+
+    // 1. Direct ID matches
+    if (bId && (cBatchId === bId || cBatchNum === bId)) return true;
+    if (bBatchId && (cBatchId === bBatchId || cBatchNum === bBatchId)) return true;
+
+    // 2. Batch number match (case-insensitive)
+    if (bNum) {
+      const bNumLower = bNum.toLowerCase();
+      if (
+        cBatchNum.toLowerCase() === bNumLower ||
+        cBatchId.toLowerCase() === bNumLower ||
+        cBatchId.toLowerCase() === `batch_${bNumLower}` ||
+        cBatchId.toLowerCase() === `batch_${bId.toLowerCase()}`
+      ) {
+        return true;
+      }
+    }
+
+    // 3. Clean numeric match (e.g. 714 in B-714)
+    if (bNumClean && bNumClean.length >= 2) {
+      if (cBatchNumClean === bNumClean || cBatchId.includes(bNumClean) || cId.includes(bNumClean)) {
+        return true;
+      }
+    }
+
+    // 4. Card ID prefix matching
+    if (bId && cId.startsWith(`card_${bId}_`)) return true;
+    if (bNum && cId.includes(`_${bNum}_`)) return true;
+
+    return false;
+  };
+
+  // Synchronous, zero-latency card resolver to preserve browser user gestures (clipboard & download)
+  const resolveBatchCardsSync = (batch: CardBatch): Card[] => {
+    // Tier 1: Search in loaded memory cards array
+    const matched = cards.filter(c => matchCardToBatch(c, batch));
     if (matched.length > 0) {
       return matched;
     }
@@ -114,21 +135,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       }));
     }
 
-    // Tier 3: Fetch directly from Firestore subcollections
-    try {
-      const cloudCards = await fetchCardsForBatch(
-        batch.tenantId || tenant.id || 'tenant_main_01', 
-        batch.id, 
-        batch.batchNumber
-      );
-      if (cloudCards && cloudCards.length > 0) {
-        return cloudCards;
-      }
-    } catch (err) {
-      console.warn('Firestore fetchCardsForBatch note:', err);
-    }
-
-    // Tier 4: Deterministic fallback reconstruction based on batch metadata
+    // Tier 3: Deterministic fallback reconstruction based on batch metadata (Instant 0ms)
     const count = batch.quantity || batch.totalCards || 1;
     const prefix = batch.prefix || '';
     const codeLen = batch.codeLength || 6;
@@ -142,7 +149,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         batchId: batch.id,
         batchNumber: batch.batchNumber,
         code: code,
-        password: batch.passwordType === 'same_as_username' ? code : (code),
+        password: batch.passwordType === 'same_as_username' ? code : code,
         profileId: batch.profileId || '',
         profileName: batch.profileName || 'default',
         rateLimit: '',
@@ -159,39 +166,73 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     return fallbackCards;
   };
 
+  // Filtered Cards with resilient null checks
+  const filteredCards = useMemo(() => {
+    return cards.filter(c => {
+      if (selectedBatchId !== 'all') {
+        const selBatch = batches.find(b => b.id === selectedBatchId || b.batchNumber === selectedBatchId);
+        if (selBatch) {
+          if (!matchCardToBatch(c, selBatch)) return false;
+        } else if (c.batchId !== selectedBatchId && c.batchNumber !== selectedBatchId) {
+          return false;
+        }
+      }
+      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchCode = c.code ? String(c.code).toLowerCase().includes(q) : false;
+        const matchBatch = c.batchNumber ? String(c.batchNumber).toLowerCase().includes(q) : false;
+        const matchAgent = c.assignedToAgentName ? String(c.assignedToAgentName).toLowerCase().includes(q) : false;
+        const matchProfile = c.profileName ? String(c.profileName).toLowerCase().includes(q) : false;
+        return matchCode || matchBatch || matchAgent || matchProfile;
+      }
+      return true;
+    });
+  }, [cards, batches, selectedBatchId, statusFilter, searchQuery]);
+
   // Handle Export Batch PDF
   const handleExportBatchPdf = async (batch: CardBatch) => {
     setIsExportingPdf(batch.id);
     try {
-      const batchCards = await resolveBatchCards(batch);
-      const tpl = templates.find(t => t.id === batch.templateId) || templates[0];
+      const batchCards = resolveBatchCardsSync(batch);
+      const tpl = templates.find(t => t.id === batch.templateId) || templates[0] || DEFAULT_TEMPLATES[0];
       const blob = await generateCardsPdf(batchCards, tpl, tenant);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `NetFlow_Batch_${batch.batchNumber}_${batchCards.length}cards.pdf`;
+      a.download = `NetFlow_Batch_${batch.batchNumber || batch.id}_${batchCards.length}cards.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (e) {
+      setToastNotification({
+        message: `تم تنزيل ملف PDF للدفعة (${batch.batchNumber}) بنجاح!`,
+        type: 'success'
+      });
+      setTimeout(() => setToastNotification(null), 4000);
+    } catch (e: any) {
       console.error('Export PDF error:', e);
+      setToastNotification({
+        message: `حدث خطأ أثناء إنشاء ملف PDF: ${e?.message || 'يرجى المحاولة مجدداً'}`,
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 5000);
     } finally {
       setIsExportingPdf(null);
     }
   };
 
-  // Copy MikroTik script for specific batch
+  // Copy MikroTik script for specific batch (executed directly within user interaction)
   const handleCopyBatchScript = async (batch: CardBatch) => {
     setIsCopyingScript(batch.id);
     try {
-      const batchCards = await resolveBatchCards(batch);
+      const batchCards = resolveBatchCardsSync(batch);
       const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
       const success = await copyTextToClipboard(script);
       if (success) {
         setCopiedBatchScript(batch.id);
         setToastNotification({
-          message: `تم نسخ سكربت المايكروتك للدفعة (${batch.batchNumber}) بنجاح! لعدد ${batchCards.length} كرت جاهز للصق في تيرمينال الراوتر.`,
+          message: `تم نسخ سكربت المايكروتك للدفعة (${batch.batchNumber}) بنجاح! جاهز للصق في تيرمينال الراوتر (${batchCards.length} كرت).`,
           type: 'success'
         });
         setTimeout(() => {
@@ -205,23 +246,30 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           count: batchCards.length
         });
         setToastNotification({
-          message: 'تم فتح نافذة الأوامر لنسخ السكربت يدوياً (أو الضغط على Ctrl + C).',
+          message: 'تم فتح نافذة الأوامر لنسخ السكربت يدوياً.',
           type: 'warning'
         });
         setTimeout(() => setToastNotification(null), 4000);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Copy script error:', err);
+      const batchCards = resolveBatchCardsSync(batch);
+      const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
+      setScriptModalData({
+        batch,
+        script,
+        count: batchCards.length
+      });
     } finally {
       setIsCopyingScript(null);
     }
   };
 
-  // Download .rsc script file for specific batch
-  const handleDownloadBatchRsc = async (batch: CardBatch) => {
+  // Download .rsc script file for specific batch (immediate download, no blocking)
+  const handleDownloadBatchRsc = (batch: CardBatch) => {
     setIsDownloadingRsc(batch.id);
     try {
-      const batchCards = await resolveBatchCards(batch);
+      const batchCards = resolveBatchCardsSync(batch);
       const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
       const fileName = `mikrotik_batch_${batch.batchNumber || batch.id}_${batchCards.length}cards.rsc`;
       const ok = downloadTextFile(fileName, script);
@@ -246,38 +294,27 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       }
     } catch (err) {
       console.error('Download RSC error:', err);
-      try {
-        const batchCards = await resolveBatchCards(batch);
-        const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
-        setScriptModalData({
-          batch,
-          script,
-          count: batchCards.length
-        });
-      } catch {
-        // Safe fallback
-      }
-    } finally {
-      setIsDownloadingRsc(null);
-    }
-  };
-
-  // Open interactive script viewer modal
-  const handleOpenScriptModal = async (batch: CardBatch) => {
-    setIsCopyingScript(batch.id);
-    try {
-      const batchCards = await resolveBatchCards(batch);
+      const batchCards = resolveBatchCardsSync(batch);
       const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
       setScriptModalData({
         batch,
         script,
         count: batchCards.length
       });
-    } catch (err) {
-      console.error('Open script modal error:', err);
     } finally {
-      setIsCopyingScript(null);
+      setIsDownloadingRsc(null);
     }
+  };
+
+  // Open interactive script viewer modal
+  const handleOpenScriptModal = (batch: CardBatch) => {
+    const batchCards = resolveBatchCardsSync(batch);
+    const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
+    setScriptModalData({
+      batch,
+      script,
+      count: batchCards.length
+    });
   };
 
   return (
@@ -597,7 +634,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                       {card.password || '—'}
                     </td>
                     <td className="py-2.5 px-3 font-medium text-slate-200">
-                      {card.profileName.split('(')[0]}
+                      {(card.profileName || 'افتراضي').split('(')[0]}
                     </td>
                     <td className="py-2.5 px-3 font-mono font-bold text-amber-400">
                       {card.price} {tenant.currency}

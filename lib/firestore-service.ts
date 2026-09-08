@@ -68,16 +68,24 @@ export async function ensureAuth(): Promise<User | null> {
 
   if (!authInitPromise) {
     authInitPromise = new Promise((resolve) => {
+      // 2.5s maximum safeguard so authentication never blocks UI or client actions
+      const timer = setTimeout(() => {
+        resolve(auth.currentUser || null);
+      }, 2500);
+
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
         if (user) {
+          clearTimeout(timer);
           unsubscribe();
           resolve(user);
         } else {
           try {
             const userCred = await signInAnonymously(auth);
+            clearTimeout(timer);
             unsubscribe();
             resolve(userCred.user);
           } catch (err) {
+            clearTimeout(timer);
             console.warn('Anonymous auth note (proceeding with client local state):', err);
             unsubscribe();
             resolve(null);
