@@ -1,0 +1,5 @@
+[install]
+backend = "copyfile"
+networkConcurrency = 16
+os = ["linux"]
+cpu = ["x64"]

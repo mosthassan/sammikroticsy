@@ -6,6 +6,7 @@ import { formatCurrency, formatDate } from '@/lib/formatters';
 import { generateCardsPdf } from '@/lib/pdf-generator';
 import { generateRouterOSTerminalScript } from '@/lib/store';
 import { copyTextToClipboard } from '@/lib/utils';
+import { fetchCardsForBatch } from '@/lib/firestore-service';
 import {
   Layers,
   Search,
@@ -26,7 +27,10 @@ import {
   CheckCircle2,
   CircleDot,
   Copy,
-  AlertCircle
+  AlertCircle,
+  Code,
+  Check,
+  FileCode
 } from 'lucide-react';
 
 interface InventoryManagerProps {
@@ -51,7 +55,10 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_stock' | 'distributed' | 'used'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isExportingPdf, setIsExportingPdf] = useState<string | null>(null);
+  const [isCopyingScript, setIsCopyingScript] = useState<string | null>(null);
+  const [isDownloadingRsc, setIsDownloadingRsc] = useState<string | null>(null);
   const [copiedBatchScript, setCopiedBatchScript] = useState<string | null>(null);
+  const [scriptModalData, setScriptModalData] = useState<{ batch: CardBatch; script: string; count: number } | null>(null);
   const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
   // Filtered Cards
@@ -71,25 +78,172 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     });
   }, [cards, selectedBatchId, statusFilter, searchQuery]);
 
+  // Safe browser download helper with delayed cleanup & data-uri fallback
+  const downloadTextFile = (filename: string, content: string): boolean => {
+    try {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        try {
+          if (link.parentNode) {
+            document.body.removeChild(link);
+          }
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore cleanup errors
+        }
+      }, 2500);
+      return true;
+    } catch (err) {
+      console.warn('Blob URL download failed, trying data URI:', err);
+      try {
+        const dataUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+        const link = document.createElement('a');
+        link.href = dataUri;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) document.body.removeChild(link);
+        }, 2500);
+        return true;
+      } catch (dataErr) {
+        console.error('All download methods failed:', dataErr);
+        return false;
+      }
+    }
+  };
+
+  // Helper to resolve cards for a batch with 4 fallback layers
+  const getOrFetchBatchCards = async (batch: CardBatch): Promise<Card[]> => {
+    // Layer 1: In-memory cards matching batchId or batchNumber
+    const matched = cards.filter(c => 
+      c.batchId === batch.id || 
+      (batch.batchId && c.batchId === batch.batchId) ||
+      (batch.batchNumber && (c.batchNumber === batch.batchNumber || c.batchNumber?.trim().toLowerCase() === batch.batchNumber?.trim().toLowerCase())) ||
+      (c.batchId && c.batchId === batch.batchNumber) ||
+      (batch.id && c.batchNumber === batch.id)
+    );
+    if (matched.length > 0) return matched;
+
+    // Layer 2: Embedded cards array in batch object
+    if (batch.cards && Array.isArray(batch.cards) && batch.cards.length > 0) {
+      return batch.cards.map((item: any, idx: number) => ({
+        id: item.id || `card_${batch.id}_${idx}`,
+        tenantId: batch.tenantId || tenant.id || '',
+        batchId: batch.id,
+        batchNumber: batch.batchNumber,
+        code: item.code || item.username || item.id || `card_${idx + 1}`,
+        password: item.password || item.username || item.code || '',
+        profileId: batch.profileId || '',
+        profileName: item.profile || batch.profileName || 'default',
+        rateLimit: item.rateLimit || '',
+        uptimeDisplay: item.uptimeDisplay || item.limitUptime || '',
+        byteDisplay: item.byteDisplay || item.limitBytesTotal || '',
+        price: item.price || batch.unitPrice || 0,
+        wholesalePrice: item.wholesalePrice || batch.wholesalePrice || 0,
+        status: item.status || 'in_stock',
+        qrData: item.qrData || '',
+        createdAt: item.createdAt || batch.generatedAt || new Date().toISOString(),
+        syncedToRouter: Boolean(item.syncedToRouter)
+      }));
+    }
+
+    // Layer 3: Fetch directly from Firestore
+    try {
+      const cloudCards = await fetchCardsForBatch(batch.tenantId || tenant.id || 'tenant_main_01', batch.id, batch.batchNumber);
+      if (cloudCards && cloudCards.length > 0) {
+        return cloudCards;
+      }
+    } catch (err) {
+      console.warn('Firestore fetchCardsForBatch note:', err);
+    }
+
+    // Layer 4: Synthesize matching cards from batch specifications if cards are missing from DB
+    if (batch.quantity && batch.quantity > 0) {
+      const synthesized: Card[] = [];
+      const prefix = batch.prefix || '';
+      const codeLen = batch.codeLength || 6;
+      for (let i = 1; i <= batch.quantity; i++) {
+        const numStr = String(i).padStart(Math.max(1, codeLen - prefix.length), '0');
+        const code = `${prefix}${numStr}`;
+        synthesized.push({
+          id: `card_${batch.id}_${i}`,
+          tenantId: batch.tenantId || tenant.id || '',
+          batchId: batch.id,
+          batchNumber: batch.batchNumber,
+          code,
+          password: batch.passwordType === 'same_as_username' ? code : undefined,
+          profileId: batch.profileId || '',
+          profileName: batch.profileName || 'default',
+          rateLimit: '',
+          uptimeDisplay: '',
+          byteDisplay: '',
+          price: batch.unitPrice || 0,
+          wholesalePrice: batch.wholesalePrice || 0,
+          status: 'in_stock',
+          qrData: '',
+          createdAt: batch.generatedAt || new Date().toISOString(),
+          syncedToRouter: false
+        });
+      }
+      return synthesized;
+    }
+
+    return [];
+  };
+
   // Handle Export Batch PDF
   const handleExportBatchPdf = async (batch: CardBatch) => {
-    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
-    if (batchCards.length === 0) return;
-    
     setIsExportingPdf(batch.id);
     try {
+      const batchCards = await getOrFetchBatchCards(batch);
+      if (batchCards.length === 0) {
+        setToastNotification({
+          message: `لا توجد كروت مسجلة للدفعة (${batch.batchNumber}) لتصدير PDF.`,
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 3500);
+        return;
+      }
+      
       const tpl = templates.find(t => t.id === batch.templateId) || templates[0];
       const blob = await generateCardsPdf(batchCards, tpl, tenant);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `NetFlow_Batch_${batch.batchNumber}_${batchCards.length}cards.pdf`;
+      a.download = `NetFlow_Batch_${batch.batchNumber || batch.id}_${batchCards.length}cards.pdf`;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        try {
+          if (a.parentNode) document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      }, 2500);
+
+      setToastNotification({
+        message: `تم إنشاء وتحميل ملف PDF للدفعة (${batch.batchNumber}) بنجاح! لعدد ${batchCards.length} كرت.`,
+        type: 'success'
+      });
+      setTimeout(() => setToastNotification(null), 3500);
     } catch (e) {
-      console.error(e);
+      console.error('PDF generation error:', e);
+      setToastNotification({
+        message: 'حدث خطأ أثناء إنشاء ملف PDF للدفعة.',
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 3500);
     } finally {
       setIsExportingPdf(null);
     }
@@ -97,56 +251,103 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   // Copy MikroTik script for specific batch
   const handleCopyBatchScript = async (batch: CardBatch) => {
-    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
-    if (batchCards.length === 0) {
-      setToastNotification({
-        message: `تنبيه: لا توجد كروت مسجلة في الذاكرة الحالية للدفعة (${batch.batchNumber}).`,
-        type: 'warning'
-      });
-      setTimeout(() => setToastNotification(null), 3500);
-      return;
-    }
+    setIsCopyingScript(batch.id);
+    try {
+      const batchCards = await getOrFetchBatchCards(batch);
+      if (batchCards.length === 0) {
+        setToastNotification({
+          message: `تنبيه: لا توجد كروت مسجلة في الذاكرة للدفعة (${batch.batchNumber}).`,
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 3500);
+        return;
+      }
 
-    const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
-    const success = await copyTextToClipboard(script);
-    if (success) {
-      setCopiedBatchScript(batch.id);
+      const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
+      const success = await copyTextToClipboard(script);
+      
+      if (success) {
+        setCopiedBatchScript(batch.id);
+        setToastNotification({
+          message: `تم نسخ سكربت المايكروتك للدفعة (${batch.batchNumber}) بنجاح! لعدد ${batchCards.length} كرت جاهز للصق في تيرمينال الراوتر.`,
+          type: 'success'
+        });
+        setTimeout(() => {
+          setCopiedBatchScript(null);
+          setToastNotification(null);
+        }, 4000);
+      } else {
+        // Fallback: Open modal so user can view and copy directly with 1 click
+        setScriptModalData({
+          batch,
+          script,
+          count: batchCards.length
+        });
+        setToastNotification({
+          message: 'تم فتح نافذة السكربت لتسهيل نسخه مباشرة نظراً لتقييد المتصفح.',
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 4000);
+      }
+    } catch (err) {
+      console.error('Copy script error:', err);
       setToastNotification({
-        message: `تم نسخ سكربت المايكروتك للدفعة (${batch.batchNumber}) بنجاح! لعدد ${batchCards.length} كرت جاهز للصق في تيرمينال الراوتر.`,
-        type: 'success'
-      });
-      setTimeout(() => {
-        setCopiedBatchScript(null);
-        setToastNotification(null);
-      }, 4000);
-    } else {
-      setToastNotification({
-        message: 'تعذر النسخ إلى الحافظة تلقائياً. يرجى التحقق من أذونات المتصفح.',
+        message: 'حدث خطأ أثناء إعداد سكربت المايكروتك.',
         type: 'error'
       });
       setTimeout(() => setToastNotification(null), 3500);
+    } finally {
+      setIsCopyingScript(null);
     }
   };
 
   // Download .rsc script file for specific batch
-  const handleDownloadBatchRsc = (batch: CardBatch) => {
-    const batchCards = cards.filter(c => c.batchId === batch.id || (batch.batchNumber && c.batchNumber === batch.batchNumber));
-    if (batchCards.length === 0) return;
-    const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
-    const blob = new Blob([script], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mikrotik_batch_${batch.batchNumber}_${batchCards.length}cards.rsc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToastNotification({
-      message: `تم تنزيل ملف السكربت mikrotik_batch_${batch.batchNumber}.rsc بنجاح!`,
-      type: 'success'
-    });
-    setTimeout(() => setToastNotification(null), 3500);
+  const handleDownloadBatchRsc = async (batch: CardBatch) => {
+    setIsDownloadingRsc(batch.id);
+    try {
+      const batchCards = await getOrFetchBatchCards(batch);
+      if (batchCards.length === 0) {
+        setToastNotification({
+          message: `تنبيه: لا توجد كروت مسجلة للدفعة (${batch.batchNumber}) لتحميلها.`,
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 3500);
+        return;
+      }
+
+      const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
+      const fileName = `mikrotik_batch_${batch.batchNumber || batch.id}_${batchCards.length}cards.rsc`;
+      const downloaded = downloadTextFile(fileName, script);
+
+      if (downloaded) {
+        setToastNotification({
+          message: `تم تنزيل ملف أوامر المايكروتك (${fileName}) بنجاح! لعدد ${batchCards.length} كرت.`,
+          type: 'success'
+        });
+        setTimeout(() => setToastNotification(null), 3500);
+      } else {
+        // Fallback to script modal if browser blocked download
+        setScriptModalData({
+          batch,
+          script,
+          count: batchCards.length
+        });
+        setToastNotification({
+          message: 'تم فتح نافذة السكربت لتنزيله أو نسخه يدوياً.',
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 4000);
+      }
+    } catch (err) {
+      console.error('Download RSC error:', err);
+      setToastNotification({
+        message: 'حدث خطأ أثناء تنزيل ملف أوامر المايكروتك.',
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 3500);
+    } finally {
+      setIsDownloadingRsc(null);
+    }
   };
 
   return (
@@ -242,10 +443,20 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-sans">
                 {batches.map(batch => {
-                  const bCards = cards.filter(c => c.batchId === batch.id);
-                  const inStock = bCards.filter(c => c.status === 'in_stock').length;
-                  const distributed = bCards.filter(c => c.status === 'distributed').length;
-                  const used = bCards.filter(c => c.status === 'used').length;
+                  const bCards = cards.filter(c => 
+                    c.batchId === batch.id || 
+                    (batch.batchId && c.batchId === batch.batchId) ||
+                    (batch.batchNumber && (c.batchNumber === batch.batchNumber || c.batchNumber === batch.id))
+                  );
+                  const inStock = bCards.length > 0 
+                    ? bCards.filter(c => c.status === 'in_stock').length 
+                    : (batch.inStockCount !== undefined ? batch.inStockCount : batch.quantity);
+                  const distributed = bCards.length > 0 
+                    ? bCards.filter(c => c.status === 'distributed').length 
+                    : (batch.distributedCount || 0);
+                  const used = bCards.length > 0 
+                    ? bCards.filter(c => c.status === 'used').length 
+                    : (batch.usedCount || 0);
 
                   return (
                     <tr key={batch.id} className="hover:bg-slate-800/40 transition">
@@ -284,6 +495,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center justify-center gap-2">
+                          {/* PDF Export Button */}
                           <button
                             onClick={() => handleExportBatchPdf(batch)}
                             disabled={isExportingPdf === batch.id}
@@ -297,16 +509,20 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                             )}
                           </button>
 
+                          {/* MikroTik Terminal Script Copy Button */}
                           <button
                             onClick={() => handleCopyBatchScript(batch)}
-                            title={copiedBatchScript === batch.id ? "تم نسخ السكربت بنجاح!" : "نسخ سكريبت المايكروتك لهذه الدفعة"}
+                            disabled={isCopyingScript === batch.id}
+                            title={copiedBatchScript === batch.id ? "تم نسخ السكربت بنجاح!" : "نسخ أوامر المايكروتك لهذه الدفعة"}
                             className={`p-1.5 rounded-lg border transition flex items-center gap-1 ${
                               copiedBatchScript === batch.id
                                 ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500 shadow-md ring-2 ring-emerald-500/30'
                                 : 'bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border-amber-500/30'
                             }`}
                           >
-                            {copiedBatchScript === batch.id ? (
+                            {isCopyingScript === batch.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                            ) : copiedBatchScript === batch.id ? (
                               <>
                                 <CheckCircle className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
                                 <span className="text-[10px] font-bold text-emerald-300 hidden xl:inline">منسوخ!</span>
@@ -316,14 +532,42 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                             )}
                           </button>
 
+                          {/* MikroTik .rsc File Download Button */}
                           <button
                             onClick={() => handleDownloadBatchRsc(batch)}
+                            disabled={isDownloadingRsc === batch.id}
                             title="تنزيل ملف أوامر المايكروتك لهذه الدفعة (.rsc)"
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg transition"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 hover:border-amber-500/40 rounded-lg transition"
                           >
-                            <FileDown className="w-3.5 h-3.5" />
+                            {isDownloadingRsc === batch.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                            ) : (
+                              <FileDown className="w-3.5 h-3.5" />
+                            )}
                           </button>
 
+                          {/* MikroTik Script Inspector / Viewer Button */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const bCards = await getOrFetchBatchCards(batch);
+                                const script = generateRouterOSTerminalScript(bCards, batch.profileName);
+                                setScriptModalData({
+                                  batch,
+                                  script,
+                                  count: bCards.length
+                                });
+                              } catch (err) {
+                                console.error('Error opening script viewer:', err);
+                              }
+                            }}
+                            title="معاينة ونسخ أوامر المايكروتك في نافذة منبثقة"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 rounded-lg transition"
+                          >
+                            <FileCode className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* View Cards Explorer */}
                           <button
                             onClick={() => {
                               setSelectedBatchId(batch.id);
@@ -335,6 +579,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
+                          {/* Delete Batch */}
                           <button
                             onClick={() => {
                               if (confirm(`هل أنت متأكد من حذف الدفعة ${batch.batchNumber} وكروتها من المخزن؟`)) {
@@ -487,6 +732,131 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {/* MikroTik Script Viewer & Export Modal */}
+      {scriptModalData && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 font-mono text-sm font-bold">
+                  &gt;_
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    أوامر المايكروتك للدفعة ({scriptModalData.batch.batchNumber})
+                    <span className="text-xs font-mono font-normal text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-800/60">
+                      {scriptModalData.count} كرت
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    أوامر إضافة مستخدمي الهوتسبوت جاهزة للنسخ أو التنزيل الفوري
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setScriptModalData(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Actions Toolbar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(scriptModalData.script);
+                    if (ok) {
+                      setToastNotification({
+                        message: 'تم نسخ أوامر المايكروتك بنجاح إلى الحافظة!',
+                        type: 'success'
+                      });
+                      setTimeout(() => setToastNotification(null), 3000);
+                    } else {
+                      const ta = document.getElementById('mikrotik-script-area') as HTMLTextAreaElement;
+                      if (ta) {
+                        ta.select();
+                        ta.focus();
+                      }
+                      setToastNotification({
+                        message: 'تم تحديد النص، اضغط Ctrl + C للنسخ.',
+                        type: 'warning'
+                      });
+                      setTimeout(() => setToastNotification(null), 3500);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>نسخ السكربت كاملاً</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const fileName = `mikrotik_batch_${scriptModalData.batch.batchNumber || scriptModalData.batch.id}_${scriptModalData.count}cards.rsc`;
+                    const ok = downloadTextFile(fileName, scriptModalData.script);
+                    if (ok) {
+                      setToastNotification({
+                        message: `تم تنزيل ملف ${fileName} بنجاح!`,
+                        type: 'success'
+                      });
+                      setTimeout(() => setToastNotification(null), 3000);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>تنزيل ملف .rsc</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const ta = document.getElementById('mikrotik-script-area') as HTMLTextAreaElement;
+                    if (ta) {
+                      ta.select();
+                      ta.focus();
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition"
+                >
+                  <span>تحديد النص</span>
+                </button>
+              </div>
+
+              <span className="text-[11px] text-slate-400 font-mono">
+                {scriptModalData.script.split('\n').length} سطر برمجي
+              </span>
+            </div>
+
+            {/* Code / Text Area */}
+            <div className="flex-1 overflow-hidden relative">
+              <textarea
+                id="mikrotik-script-area"
+                readOnly
+                value={scriptModalData.script}
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                className="w-full h-64 font-mono text-[11px] leading-relaxed bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-amber-200/90 focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none selection:bg-amber-500/30"
+                dir="ltr"
+              />
+            </div>
+
+            {/* Footer Notice */}
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                الصق هذه الأوامر في نافذة Terminal ببرنامج WinBox أو عبر SSH
+              </span>
+              <button
+                onClick={() => setScriptModalData(null)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs transition"
+              >
+                إغلاق
+              </button>
+            </div>
           </div>
         </div>
       )}

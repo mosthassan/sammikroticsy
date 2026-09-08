@@ -289,7 +289,7 @@ export function PWAInstallPrompt() {
                         </div>
                         <div className="flex-1">
                           <p className="text-slate-300 font-medium">
-                            اختر <span className="font-bold text-emerald-400">"تثبيت التطبيق"</span> أو <span className="font-bold text-sky-400">"الإضافة إلى الشاشة الرئيسية"</span>.
+                            اختر <span className="font-bold text-emerald-400">&quot;تثبيت التطبيق&quot;</span> أو <span className="font-bold text-sky-400">&quot;الإضافة إلى الشاشة الرئيسية&quot;</span>.
                           </p>
                         </div>
                       </div>

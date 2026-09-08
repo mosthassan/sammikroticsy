@@ -879,15 +879,23 @@ export function generateRouterOSTerminalScript(cards: Card[], profileName: strin
   ];
 
   for (const card of cards) {
-    const safeCode = sanitizeRouterOSValue(card.code, 40);
+    const rawCode = card.code || (card as any).username || card.id;
+    const safeCode = sanitizeRouterOSValue(rawCode, 40);
     if (!safeCode) continue;
 
-    const rawPwd = card.password !== undefined && card.password !== '' ? card.password : card.code;
+    const rawPwd = card.password !== undefined && card.password !== '' 
+      ? card.password 
+      : ((card as any).password !== undefined && (card as any).password !== '' ? (card as any).password : rawCode);
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const prof = resolveRouterOSProfile(profileName || card.profileName, 'default');
-    const batchId = sanitizeRouterOSComment(card.batchNumber ? `NetFlow-${card.batchNumber}` : `NetFlow_${card.price}`);
-    const limitBytes = card.byteDisplay ? formatByteLimit(card.byteDisplay) : '0';
-    const limitUptime = card.uptimeDisplay ? formatUptimeLimit(card.uptimeDisplay) : '0';
+    const prof = resolveRouterOSProfile(profileName || card.profileName || (card as any).profile, 'default');
+    const bNumber = card.batchNumber || (card as any).batchNumber || (card as any).batchId || '';
+    const batchId = sanitizeRouterOSComment(bNumber ? `NetFlow-${bNumber}` : `NetFlow_${card.price || 'Batch'}`);
+    const limitBytes = card.byteDisplay 
+      ? formatByteLimit(card.byteDisplay) 
+      : ((card as any).limitBytesTotal ? formatByteLimit((card as any).limitBytesTotal) : (card.byteLimit ? formatByteLimit(card.byteLimit) : '0'));
+    const limitUptime = card.uptimeDisplay 
+      ? formatUptimeLimit(card.uptimeDisplay) 
+      : ((card as any).limitUptime ? formatUptimeLimit((card as any).limitUptime) : (card.uptimeLimit ? formatUptimeLimit(card.uptimeLimit) : '0'));
     
     // MikroTik RouterOS v7 standard: /ip hotspot user add ...
     lines.push(`/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`);

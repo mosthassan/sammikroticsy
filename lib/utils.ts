@@ -222,31 +222,33 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 
   // 2. Robust fallback via hidden textarea and document.execCommand('copy')
-  try {
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.top = '0';
-    textArea.style.left = '0';
-    textArea.style.width = '2em';
-    textArea.style.height = '2em';
-    textArea.style.padding = '0';
-    textArea.style.border = 'none';
-    textArea.style.outline = 'none';
-    textArea.style.boxShadow = 'none';
-    textArea.style.background = 'transparent';
-    textArea.style.opacity = '0';
-    textArea.style.pointerEvents = 'none';
-    textArea.setAttribute('readonly', '');
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    textArea.setSelectionRange(0, textArea.value.length);
-    const successful = document.execCommand('copy');
-    document.body.removeChild(textArea);
-    return successful;
-  } catch (fallbackErr) {
-    console.error('Cross-browser fallback copy failed:', fallbackErr);
-    return false;
+  if (typeof document !== 'undefined') {
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      // Position offscreen without making readonly or pointer-events none, which breaks copy on Chrome/Safari
+      textArea.style.position = 'fixed';
+      textArea.style.top = '-9999px';
+      textArea.style.left = '-9999px';
+      textArea.style.width = '2em';
+      textArea.style.height = '2em';
+      textArea.style.padding = '0';
+      textArea.style.border = 'none';
+      textArea.style.outline = 'none';
+      textArea.style.boxShadow = 'none';
+      textArea.style.background = 'transparent';
+      textArea.style.fontSize = '12pt';
+      document.body.appendChild(textArea);
+      textArea.focus({ preventScroll: true });
+      textArea.select();
+      textArea.setSelectionRange(0, textArea.value.length);
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) return true;
+    } catch (fallbackErr) {
+      console.error('Cross-browser fallback copy failed:', fallbackErr);
+    }
   }
+
+  return false;
 }

@@ -637,6 +637,66 @@ export function subscribeCards(
   );
 }
 
+export async function fetchCardsForBatch(
+  tenantId: string, 
+  batchId: string, 
+  batchNumber?: string
+): Promise<Card[]> {
+  try {
+    await ensureAuth();
+
+    // 1. Check if cards are embedded on the tenant batch document
+    try {
+      const batchDocRef = doc(db, 'tenants', tenantId, 'batches', batchId);
+      const batchDoc = await getDoc(batchDocRef);
+      if (batchDoc.exists()) {
+        const data = batchDoc.data();
+        if (data?.cards && Array.isArray(data.cards) && data.cards.length > 0) {
+          return data.cards.map((item: any, idx: number) => ({
+            id: item.id || `card_${batchId}_${idx}`,
+            tenantId,
+            batchId,
+            batchNumber: batchNumber || data.batchNumber || '',
+            code: item.code || item.username || item.id || `card_${idx + 1}`,
+            password: item.password || item.username || item.code || '',
+            profileId: data.profileId || '',
+            profileName: item.profile || data.profileName || 'default',
+            rateLimit: item.rateLimit || '',
+            uptimeDisplay: item.uptimeDisplay || item.limitUptime || '',
+            byteDisplay: item.byteDisplay || item.limitBytesTotal || '',
+            price: item.price || data.unitPrice || 0,
+            wholesalePrice: item.wholesalePrice || data.wholesalePrice || 0,
+            status: item.status || 'in_stock',
+            qrData: item.qrData || '',
+            createdAt: item.createdAt || data.generatedAt || new Date().toISOString(),
+            syncedToRouter: Boolean(item.syncedToRouter)
+          })) as Card[];
+        }
+      }
+    } catch (docErr) {
+      console.warn('Batch doc embedded cards lookup note:', docErr);
+    }
+
+    // 2. Query the tenant cards subcollection by batchId
+    const colRef = collection(db, 'tenants', tenantId, 'cards');
+    let q = query(colRef, where('batchId', '==', batchId));
+    let snap = await getDocs(q);
+
+    // 3. Fallback: query by batchNumber if empty
+    if (snap.empty && batchNumber) {
+      q = query(colRef, where('batchNumber', '==', batchNumber));
+      snap = await getDocs(q);
+    }
+
+    const cards: Card[] = [];
+    snap.forEach((d) => cards.push(d.data() as Card));
+    return cards;
+  } catch (error) {
+    console.warn('Firestore fetchCardsForBatch warning:', error);
+    return [];
+  }
+}
+
 export async function deleteBatchAndCards(
   tenantId: string, 
   batchId: string
