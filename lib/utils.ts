@@ -222,33 +222,73 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 
   // 2. Robust fallback via hidden textarea and document.execCommand('copy')
-  if (typeof document !== 'undefined') {
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = '0';
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    textArea.style.opacity = '0';
+    textArea.style.pointerEvents = 'none';
+    textArea.setAttribute('readonly', '');
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, textArea.value.length);
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (fallbackErr) {
+    console.error('Cross-browser fallback copy failed:', fallbackErr);
+    return false;
+  }
+}
+
+/**
+ * Triggers a download of a text file (.rsc, .txt, .json) with robust fallback
+ */
+export function downloadTextFile(filename: string, content: string): boolean {
+  if (typeof window === 'undefined' || !content) return false;
+  try {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch {}
+    }, 1200);
+    return true;
+  } catch (blobErr) {
+    console.warn('Blob download failed, trying data URI:', blobErr);
     try {
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      // Position offscreen without making readonly or pointer-events none, which breaks copy on Chrome/Safari
-      textArea.style.position = 'fixed';
-      textArea.style.top = '-9999px';
-      textArea.style.left = '-9999px';
-      textArea.style.width = '2em';
-      textArea.style.height = '2em';
-      textArea.style.padding = '0';
-      textArea.style.border = 'none';
-      textArea.style.outline = 'none';
-      textArea.style.boxShadow = 'none';
-      textArea.style.background = 'transparent';
-      textArea.style.fontSize = '12pt';
-      document.body.appendChild(textArea);
-      textArea.focus({ preventScroll: true });
-      textArea.select();
-      textArea.setSelectionRange(0, textArea.value.length);
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textArea);
-      if (successful) return true;
-    } catch (fallbackErr) {
-      console.error('Cross-browser fallback copy failed:', fallbackErr);
+      const link = document.createElement('a');
+      link.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+      link.setAttribute('download', filename);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        try { document.body.removeChild(link); } catch {}
+      }, 1200);
+      return true;
+    } catch (dataUriErr) {
+      console.error('All download methods failed:', dataUriErr);
+      return false;
     }
   }
-
-  return false;
 }
+

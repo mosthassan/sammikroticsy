@@ -865,8 +865,10 @@ export {
 } from './routeros-utils';
 
 // RouterOS Script Generators
-export function generateRouterOSTerminalScript(cards: Card[], profileName: string = ''): string {
-  const pName = profileName || (cards[0]?.profileName ? cards[0].profileName : 'default');
+export function generateRouterOSTerminalScript(cards: (Card | any)[], profileName: string = ''): string {
+  if (!cards || !Array.isArray(cards)) return '';
+  const firstCard = cards[0] || {};
+  const pName = profileName || firstCard.profileName || firstCard.profile || 'default';
   const cleanProf = resolveRouterOSProfile(pName, 'default');
   const lines: string[] = [
     `# ==========================================================`,
@@ -879,23 +881,24 @@ export function generateRouterOSTerminalScript(cards: Card[], profileName: strin
   ];
 
   for (const card of cards) {
-    const rawCode = card.code || (card as any).username || card.id;
+    if (!card) continue;
+    const rawCode = card.code || card.username || card.id;
     const safeCode = sanitizeRouterOSValue(rawCode, 40);
     if (!safeCode) continue;
 
     const rawPwd = card.password !== undefined && card.password !== '' 
       ? card.password 
-      : ((card as any).password !== undefined && (card as any).password !== '' ? (card as any).password : rawCode);
+      : (card.username || card.code || rawCode);
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const prof = resolveRouterOSProfile(profileName || card.profileName || (card as any).profile, 'default');
-    const bNumber = card.batchNumber || (card as any).batchNumber || (card as any).batchId || '';
-    const batchId = sanitizeRouterOSComment(bNumber ? `NetFlow-${bNumber}` : `NetFlow_${card.price || 'Batch'}`);
+    const prof = resolveRouterOSProfile(profileName || card.profileName || card.profile, 'default');
+    const bNum = card.batchNumber || card.batchId || '';
+    const batchId = sanitizeRouterOSComment(bNum ? `NetFlow-${bNum}` : `NetFlow_${card.price || 'Batch'}`);
     const limitBytes = card.byteDisplay 
       ? formatByteLimit(card.byteDisplay) 
-      : ((card as any).limitBytesTotal ? formatByteLimit((card as any).limitBytesTotal) : (card.byteLimit ? formatByteLimit(card.byteLimit) : '0'));
+      : (card.limitBytesTotal ? formatByteLimit(card.limitBytesTotal) : (card.byteLimit ? formatByteLimit(card.byteLimit) : '0'));
     const limitUptime = card.uptimeDisplay 
       ? formatUptimeLimit(card.uptimeDisplay) 
-      : ((card as any).limitUptime ? formatUptimeLimit((card as any).limitUptime) : (card.uptimeLimit ? formatUptimeLimit(card.uptimeLimit) : '0'));
+      : (card.limitUptime ? formatUptimeLimit(card.limitUptime) : (card.uptimeLimit ? formatUptimeLimit(card.uptimeLimit) : '0'));
     
     // MikroTik RouterOS v7 standard: /ip hotspot user add ...
     lines.push(`/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`);

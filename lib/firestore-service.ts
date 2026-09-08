@@ -8,6 +8,7 @@ import {
   deleteDoc, 
   writeBatch,
   query, 
+  where,
   orderBy,
   limit,
   onSnapshot,
@@ -645,7 +646,7 @@ export async function fetchCardsForBatch(
   try {
     await ensureAuth();
 
-    // 1. Check if cards are embedded on the tenant batch document
+    // 1. Check if cards are embedded on the tenant batch document or root batch document
     try {
       const batchDocRef = doc(db, 'tenants', tenantId, 'batches', batchId);
       const batchDoc = await getDoc(batchDocRef);
@@ -658,7 +659,7 @@ export async function fetchCardsForBatch(
             batchId,
             batchNumber: batchNumber || data.batchNumber || '',
             code: item.code || item.username || item.id || `card_${idx + 1}`,
-            password: item.password || item.username || item.code || '',
+            password: item.password !== undefined ? item.password : (item.username || item.code || ''),
             profileId: data.profileId || '',
             profileName: item.profile || data.profileName || 'default',
             rateLimit: item.rateLimit || '',
@@ -674,25 +675,32 @@ export async function fetchCardsForBatch(
         }
       }
     } catch (docErr) {
-      console.warn('Batch doc embedded cards lookup note:', docErr);
+      console.warn('Tenant batch doc cards check note:', docErr);
     }
 
-    // 2. Query the tenant cards subcollection by batchId
-    const colRef = collection(db, 'tenants', tenantId, 'cards');
-    let q = query(colRef, where('batchId', '==', batchId));
-    let snap = await getDocs(q);
+    // 2. Query tenant cards subcollection by batchId
+    try {
+      const colRef = collection(db, 'tenants', tenantId, 'cards');
+      let q = query(colRef, where('batchId', '==', batchId));
+      let snap = await getDocs(q);
 
-    // 3. Fallback: query by batchNumber if empty
-    if (snap.empty && batchNumber) {
-      q = query(colRef, where('batchNumber', '==', batchNumber));
-      snap = await getDocs(q);
+      if (snap.empty && batchNumber) {
+        q = query(colRef, where('batchNumber', '==', batchNumber));
+        snap = await getDocs(q);
+      }
+
+      if (!snap.empty) {
+        const cards: Card[] = [];
+        snap.forEach((d) => cards.push(d.data() as Card));
+        return cards;
+      }
+    } catch (queryErr) {
+      console.warn('Tenant cards query note:', queryErr);
     }
 
-    const cards: Card[] = [];
-    snap.forEach((d) => cards.push(d.data() as Card));
-    return cards;
+    return [];
   } catch (error) {
-    console.warn('Firestore fetchCardsForBatch warning:', error);
+    console.warn('fetchCardsForBatch error caught safely:', error);
     return [];
   }
 }

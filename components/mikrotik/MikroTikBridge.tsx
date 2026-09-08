@@ -9,6 +9,7 @@ import {
   generateRouterOSFetchPollingScript,
   generateRouterOSCleanupScript
 } from '@/lib/store';
+import { copyTextToClipboard, downloadTextFile } from '@/lib/utils';
 import {
   Wifi,
   Terminal,
@@ -130,37 +131,24 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
     return generateRouterOSCleanupScript(retentionPolicy, excludeComments);
   }, [retentionPolicy, excludeComments]);
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(id);
-    setTimeout(() => setCopiedText(null), 3000);
+  const handleCopy = async (text: string, id: string) => {
+    const success = await copyTextToClipboard(text);
+    if (success) {
+      setCopiedText(id);
+      setTimeout(() => setCopiedText(null), 3000);
+    }
   };
 
   const handleDownloadExport = () => {
     const isCsv = scriptFormat === 'mikhmon_csv';
     const ext = isCsv ? 'csv' : 'rsc';
-    const mime = isCsv ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8';
-    const blob = new Blob([currentExportContent], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `netflow_${scriptFormat}_${selectedBatchId}_${targetCards.length}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `netflow_${scriptFormat}_${selectedBatchId}_${targetCards.length}.${ext}`;
+    downloadTextFile(filename, currentExportContent);
   };
 
   const handleDownloadCleanupScript = () => {
-    const blob = new Blob([cleanupScript], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `netflow_hotspot_cleanup_${retentionPolicy}.rsc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `netflow_hotspot_cleanup_${retentionPolicy}.rsc`;
+    downloadTextFile(filename, cleanupScript);
   };
 
   const handleSaveSettings = () => {
