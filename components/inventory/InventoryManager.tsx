@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardBatch, Profile, Tenant, CardTemplate } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { generateCardsPdf } from '@/lib/pdf-generator';
-import { generateRouterOSTerminalScript, DEFAULT_TEMPLATES } from '@/lib/store';
+import { generateRouterOSTerminalScript } from '@/lib/mikrotik-helpers';
+import { DEFAULT_TEMPLATES } from '@/lib/store';
 import { copyTextToClipboard, downloadTextFile } from '@/lib/utils';
 import {
   Layers,

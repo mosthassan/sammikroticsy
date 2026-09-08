@@ -10,7 +10,7 @@ import {
   formatByteLimit,
   formatUptimeLimit,
   resolveRouterOSProfile
-} from '@/lib/routeros-utils';
+} from '@/lib/mikrotik-helpers';
 import { 
   registerLocalBatch, 
   getLocalPendingBatchesForToken, 
@@ -604,8 +604,8 @@ export async function GET(req: NextRequest) {
       const safeName = sanitizeRouterOSValue(card.name, 32);
       const safePass = sanitizeRouterOSValue(card.password || card.name, 32);
       const safeProf = resolveRouterOSProfile(card.profile, 'default');
-      const byteLimit = formatByteLimit(card.byteLimit);
-      const uptimeLimit = formatUptimeLimit(card.uptimeLimit);
+      const byteLimit = formatByteLimit(card.byteLimit) || '0';
+      const uptimeLimit = formatUptimeLimit(card.uptimeLimit) || '0';
       const safeComment = sanitizeRouterOSComment(card.comment || 'NetFlow_Batch', 50);
 
       return `/ip hotspot user add name="${safeName}" password="${safePass}" profile="${safeProf}" limit-bytes-total=${byteLimit} limit-uptime=${uptimeLimit} server=all comment="${safeComment}"`;

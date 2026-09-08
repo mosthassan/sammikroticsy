@@ -24,7 +24,7 @@ import {
   signOut,
   User 
 } from 'firebase/auth';
-import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from './routeros-utils';
+import { formatByteLimit, formatUptimeLimit, sanitizeRouterOSComment } from './mikrotik-helpers';
 import { 
   Tenant, 
   Profile, 

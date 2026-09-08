@@ -855,57 +855,28 @@ export function generateBatchCards(
 // ==========================================================
 // RouterOS Script Sanitization & Anti-Injection Defense
 // ==========================================================
+import {
+  sanitizeRouterOSValue,
+  sanitizeRouterOSIdentifier,
+  sanitizeRouterOSComment,
+  formatByteLimit,
+  formatLimitBytes,
+  formatUptimeLimit,
+  resolveRouterOSProfile,
+  generateRouterOSTerminalScript
+} from './mikrotik-helpers';
+
 export {
   sanitizeRouterOSValue,
   sanitizeRouterOSIdentifier,
   sanitizeRouterOSComment,
   formatByteLimit,
+  formatLimitBytes,
   formatUptimeLimit,
-  resolveRouterOSProfile
-} from './routeros-utils';
+  resolveRouterOSProfile,
+  generateRouterOSTerminalScript
+};
 
-// RouterOS Script Generators
-export function generateRouterOSTerminalScript(cards: (Card | any)[], profileName: string = ''): string {
-  if (!cards || !Array.isArray(cards)) return '';
-  const firstCard = cards[0] || {};
-  const pName = profileName || firstCard.profileName || firstCard.profile || 'default';
-  const cleanProf = resolveRouterOSProfile(pName, 'default');
-  const lines: string[] = [
-    `# ==========================================================`,
-    `# NetFlow SaaS - MikroTik Hotspot User Import Script (/ip hotspot user)`,
-    `# Generated At: ${new Date().toLocaleString('ar-EG')}`,
-    `# Total Users: ${cards.length} | Profile: ${cleanProf}`,
-    `# Note: Username = Password or separate PIN supported 100%`,
-    `# Hardened: RouterOS Injection Protected & Standalone Commands`,
-    `# ==========================================================`,
-  ];
-
-  for (const card of cards) {
-    if (!card) continue;
-    const rawCode = card.code || card.username || card.id;
-    const safeCode = sanitizeRouterOSValue(rawCode, 40);
-    if (!safeCode) continue;
-
-    const rawPwd = card.password !== undefined && card.password !== '' 
-      ? card.password 
-      : (card.username || card.code || rawCode);
-    const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const prof = resolveRouterOSProfile(profileName || card.profileName || card.profile, 'default');
-    const bNum = card.batchNumber || card.batchId || '';
-    const batchId = sanitizeRouterOSComment(bNum ? `NetFlow-${bNum}` : `NetFlow_${card.price || 'Batch'}`);
-    const limitBytes = card.byteDisplay 
-      ? formatByteLimit(card.byteDisplay) 
-      : (card.limitBytesTotal ? formatByteLimit(card.limitBytesTotal) : (card.byteLimit ? formatByteLimit(card.byteLimit) : '0'));
-    const limitUptime = card.uptimeDisplay 
-      ? formatUptimeLimit(card.uptimeDisplay) 
-      : (card.limitUptime ? formatUptimeLimit(card.limitUptime) : (card.uptimeLimit ? formatUptimeLimit(card.uptimeLimit) : '0'));
-    
-    // MikroTik RouterOS v7 standard: /ip hotspot user add ...
-    lines.push(`/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`);
-  }
-
-  return lines.join('\n');
-}
 
 export function generateUserManagerV6Script(cards: Card[], customer: string = 'admin'): string {
   const safeCustomer = sanitizeRouterOSIdentifier(customer, 'admin');
