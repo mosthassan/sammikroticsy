@@ -608,7 +608,7 @@ export async function GET(req: NextRequest) {
       const uptimeLimit = formatUptimeLimit(card.uptimeLimit) || '0';
       const safeComment = sanitizeRouterOSComment(card.comment || 'NetFlow_Batch', 50);
 
-      return `/ip hotspot user add name="${safeName}" password="${safePass}" profile="${safeProf}" limit-bytes-total=${byteLimit} limit-uptime=${uptimeLimit} server=all comment="${safeComment}"`;
+      return `:do { :if ([:len [/ip hotspot user find name="${safeName}"]] = 0) do={ /ip hotspot user add name="${safeName}" password="${safePass}" profile="${safeProf}" limit-bytes-total=${byteLimit} limit-uptime=${uptimeLimit} server=all comment="${safeComment}" } } on-error={}`;
     });
 
     // 8. Atomic Database Update: IMMEDIATELY mark batch as synced (status: 'synced', synced: true)

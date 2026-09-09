@@ -109,25 +109,47 @@ export function resolveRouterOSProfile(profile: string | null | undefined, fallb
   return clean;
 }
 
+export interface RouterOSScriptOptions {
+  activeOnly?: boolean;
+  safeDeduplication?: boolean;
+}
+
 /**
- * توليد سكربت تيرمينال المايكروتك لإضافة الكروت بأمان وصيغ مقبولة 100% (/ip hotspot user)
+ * توليد سكربت تيرمينال المايكروتك لإضافة الكروت بأمان وحماية 100% (/ip hotspot user)
+ * - يدعم حماية التكرار (Safe Deduplication): يفحص وجود الكرت في الراوتر قبل الإضافة لتجنب الأخطاء
+ * - يدعم عزل الأخطاء (:do {...} on-error={}): يضمن عدم توقف السكربت عند تعثر أي كرت
+ * - يستثني تلقائياً الكروت المنتهية أو المستهلكة (activeOnly) لمنع إعادة إحيائها بالخطأ
  */
-export function generateRouterOSTerminalScript(cards: any[], profileName: string = ""): string {
+export function generateRouterOSTerminalScript(
+  cards: any[],
+  profileName: string = "",
+  options: RouterOSScriptOptions = { activeOnly: true, safeDeduplication: true }
+): string {
   if (!cards || !Array.isArray(cards) || cards.length === 0) return "";
-  const firstCard = cards[0] || {};
+
+  // تصفية الكروت النشطة وغير المنتهية فقط لمنع إعادة الكروت المحذوفة أو المستهلكة
+  const targetCards = options.activeOnly
+    ? cards.filter(
+        (c) => c && c.status !== "used" && c.status !== "expired" && c.status !== "archived"
+      )
+    : cards;
+
+  if (targetCards.length === 0) return "# لا توجد كروت نشطة مؤهلة للمزامنة (جميع الكروت مستخدمة أو منتهية).";
+
+  const firstCard = targetCards[0] || {};
   const pName = profileName || firstCard.profileName || firstCard.profile || "default";
   const cleanProf = resolveRouterOSProfile(pName, "default");
   const lines: string[] = [
     `# ==========================================================`,
-    `# NetFlow SaaS - MikroTik Hotspot User Import Script (/ip hotspot user)`,
+    `# NetFlow SaaS - MikroTik Resilient Hotspot User Import Script`,
     `# Generated At: ${new Date().toLocaleString("ar-EG")}`,
-    `# Total Users: ${cards.length} | Profile: ${cleanProf}`,
-    `# Note: Username = Password or separate PIN supported 100%`,
-    `# Hardened: RouterOS Injection Protected & Standalone Commands`,
+    `# Total Valid Users: ${targetCards.length} | Profile: ${cleanProf}`,
+    `# Mode: Safe Deduplication & Error-Isolated Execution`,
+    `# Protection: Expired / Used Vouchers Automatically Excluded`,
     `# ==========================================================`,
   ];
 
-  for (const card of cards) {
+  for (const card of targetCards) {
     if (!card) continue;
     const rawCode = card.code || card.username || card.id;
     const safeCode = sanitizeRouterOSValue(rawCode, 40);
@@ -150,10 +172,73 @@ export function generateRouterOSTerminalScript(cards: any[], profileName: string
     const formattedUptime = formatUptimeLimit(rawUptime);
     const limitUptime = formattedUptime && formattedUptime !== "" ? formattedUptime : "0";
 
-    lines.push(
-      `/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`
-    );
+    if (options.safeDeduplication !== false) {
+      // حماية فائقة: التأكد من عدم وجود الكرت مسبقاً، وتغليف الأمر بـ on-error لمنع توقف السكربت نهائياً
+      lines.push(
+        `:do { :if ([:len [/ip hotspot user find name="${safeCode}"]] = 0) do={ /ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}" } } on-error={}`
+      );
+    } else {
+      lines.push(
+        `/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`
+      );
+    }
   }
 
   return lines.join("\n");
+}
+
+/**
+ * تقسيم الكروت إلى أجزاء آمنة (Chunks) بحجم 50 كرت لتجنب امتلاء ذاكرة تيرمينال المايكروتك (Buffer Overflow)
+ */
+export function chunkCards<T>(cards: T[], chunkSize: number = 50): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < cards.length; i += chunkSize) {
+    chunks.push(cards.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+/**
+ * مطابقة كروت الدفعة مع قائمة مستخدمي المايكروتك لمعرفة الكروت المفقودة
+ */
+export function reconcileCardsWithRouter(
+  batchCards: any[],
+  mikrotikRawOutput: string
+): {
+  foundCodes: string[];
+  missingCards: any[];
+  totalChecked: number;
+} {
+  if (!batchCards || !Array.isArray(batchCards)) {
+    return { foundCodes: [], missingCards: [], totalChecked: 0 };
+  }
+
+  // تنظيف نصوص المايكروتك واستخراج كافة الرموز والكلمات التي قد تمثل أسماء مستخدمين
+  const rawText = String(mikrotikRawOutput || "");
+  const normalizedRaw = rawText.toLowerCase();
+
+  const foundCodes: string[] = [];
+  const missingCards: any[] = [];
+
+  for (const card of batchCards) {
+    const code = String(card.code || card.username || card.id || "").trim();
+    if (!code) continue;
+
+    const lowerCode = code.toLowerCase();
+    // البحث عن الكود ككلمة كاملة أو داخل النص
+    const regex = new RegExp(`(?:name=|name="|")?${lowerCode}(?:"|\\s|$)`, "i");
+    const isFound = regex.test(normalizedRaw) || normalizedRaw.includes(lowerCode);
+
+    if (isFound) {
+      foundCodes.push(code);
+    } else {
+      missingCards.push(card);
+    }
+  }
+
+  return {
+    foundCodes,
+    missingCards,
+    totalChecked: batchCards.length
+  };
 }

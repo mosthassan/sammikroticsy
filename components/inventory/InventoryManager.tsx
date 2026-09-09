@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardBatch, Profile, Tenant, CardTemplate } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { generateCardsPdf } from '@/lib/pdf-generator';
-import { generateRouterOSTerminalScript } from '@/lib/mikrotik-helpers';
+import { generateRouterOSTerminalScript, chunkCards, reconcileCardsWithRouter } from '@/lib/mikrotik-helpers';
 import { DEFAULT_TEMPLATES } from '@/lib/store';
 import { copyTextToClipboard, downloadTextFile } from '@/lib/utils';
 import {
@@ -29,7 +29,16 @@ import {
   Copy,
   AlertCircle,
   FileCode,
-  Download
+  Download,
+  AlertTriangle,
+  HelpCircle,
+  CheckSquare,
+  ShieldAlert,
+  SlidersHorizontal,
+  ArrowRight,
+  ExternalLink,
+  SplitSquareVertical,
+  Check
 } from 'lucide-react';
 
 interface InventoryManagerProps {
@@ -57,7 +66,31 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [copiedBatchScript, setCopiedBatchScript] = useState<string | null>(null);
   const [isDownloadingRsc, setIsDownloadingRsc] = useState<string | null>(null);
   const [isCopyingScript, setIsCopyingScript] = useState<string | null>(null);
-  const [scriptModalData, setScriptModalData] = useState<{ batch: CardBatch; script: string; count: number } | null>(null);
+  const [scriptModalData, setScriptModalData] = useState<{
+    batch: CardBatch;
+    cards: Card[];
+    count: number;
+  } | null>(null);
+  const [scriptViewMode, setScriptViewMode] = useState<'rsc_file' | 'terminal_chunks'>('rsc_file');
+  const [activeChunkIndex, setActiveChunkIndex] = useState<number>(0);
+  const [excludeExpiredToggle, setExcludeExpiredToggle] = useState<boolean>(true);
+  const [copiedChunkIndex, setCopiedChunkIndex] = useState<number | null>(null);
+  const [copiedImportCommand, setCopiedImportCommand] = useState<boolean>(false);
+
+  // Reconcile / Audit with MikroTik State
+  const [reconcileModalData, setReconcileModalData] = useState<{
+    batch: CardBatch;
+    cards: Card[];
+  } | null>(null);
+  const [reconcileInput, setReconcileInput] = useState<string>('');
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+  const [reconcileResult, setReconcileResult] = useState<{
+    foundCodes: string[];
+    missingCards: Card[];
+    totalChecked: number;
+  } | null>(null);
+  const [copiedMissingScript, setCopiedMissingScript] = useState<boolean>(false);
+
   const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
   // Helper function to reliably match a card to its batch across all ID formats
@@ -284,7 +317,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       } else {
         setScriptModalData({
           batch,
-          script,
+          cards: batchCards,
           count: batchCards.length
         });
         setToastNotification({
@@ -296,10 +329,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     } catch (err) {
       console.error('Download RSC error:', err);
       const batchCards = resolveBatchCardsSync(batch);
-      const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
       setScriptModalData({
         batch,
-        script,
+        cards: batchCards,
         count: batchCards.length
       });
     } finally {
@@ -310,12 +342,67 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   // Open interactive script viewer modal
   const handleOpenScriptModal = (batch: CardBatch) => {
     const batchCards = resolveBatchCardsSync(batch);
-    const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
     setScriptModalData({
       batch,
-      script,
+      cards: batchCards,
       count: batchCards.length
     });
+    // For large batches (over 60 cards), default to safe RSC file import view
+    setScriptViewMode(batchCards.length > 60 ? 'rsc_file' : 'terminal_chunks');
+    setActiveChunkIndex(0);
+    setCopiedChunkIndex(null);
+    setCopiedImportCommand(false);
+  };
+
+  // Open live MikroTik cards audit and reconciler modal
+  const handleOpenReconcileModal = (batch: CardBatch) => {
+    const batchCards = resolveBatchCardsSync(batch);
+    setReconcileModalData({
+      batch,
+      cards: batchCards
+    });
+    setReconcileInput('');
+    setReconcileResult(null);
+    setCopiedMissingScript(false);
+  };
+
+  // Execute reconciliation between batch cards and MikroTik output
+  const handleRunReconciliation = () => {
+    if (!reconcileModalData || !reconcileInput.trim()) {
+      setToastNotification({
+        message: 'يرجى لصق ناتج استعلام مستخدمي المايكروتك أولاً لإجراء الفحص.',
+        type: 'warning'
+      });
+      setTimeout(() => setToastNotification(null), 4000);
+      return;
+    }
+
+    setIsReconciling(true);
+    try {
+      const result = reconcileCardsWithRouter(reconcileModalData.cards, reconcileInput);
+      setReconcileResult(result as any);
+      if (result.missingCards.length === 0) {
+        setToastNotification({
+          message: 'رائع جداً! كافة كروت الدفعة موجودة ومطابقة 100% في راوتر المايكروتك.',
+          type: 'success'
+        });
+      } else {
+        setToastNotification({
+          message: `تم اكتشاف ${result.missingCards.length} كرت مفقود في المايكروتك! يمكنك الآن نسخ سكربت الكروت المفقودة فقط.`,
+          type: 'warning'
+        });
+      }
+      setTimeout(() => setToastNotification(null), 5000);
+    } catch (e: any) {
+      console.error('Reconciliation error:', e);
+      setToastNotification({
+        message: 'حدث خطأ أثناء فحص ومطابقة الكروت.',
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 4000);
+    } finally {
+      setIsReconciling(false);
+    }
   };
 
   return (
@@ -493,10 +580,19 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                           {/* Preview / View Script Modal */}
                           <button
                             onClick={() => handleOpenScriptModal(batch)}
-                            title="معاينة وقراءة أوامر المايكروتك للدفعة"
+                            title="معاينة وقراءة أوامر المايكروتك للدفعة (مع التجزئة الآمنة)"
                             className="p-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 rounded-lg transition"
                           >
                             <FileCode className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Audit & Reconcile Cards with MikroTik */}
+                          <button
+                            onClick={() => handleOpenReconcileModal(batch)}
+                            title="فحص ومطابقة كروت الدفعة مع المايكروتك واكتشاف الكروت الناقصة"
+                            className="p-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-lg transition"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Download .rsc file */}
@@ -682,92 +778,485 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         </div>
       )}
 
-      {/* MikroTik Script Viewer & Manual Copy Modal */}
-      {scriptModalData && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[85vh] animate-scale-up">
+      {/* Enhanced MikroTik Script Viewer & Safe Import Modal */}
+      {scriptModalData && (() => {
+        const rawBatchCards = scriptModalData.cards || [];
+        const activeCards = excludeExpiredToggle
+          ? rawBatchCards.filter(c => c && c.status !== 'used' && c.status !== 'expired' && c.status !== 'archived')
+          : rawBatchCards;
+        const expiredCount = rawBatchCards.length - activeCards.length;
+        const chunks = chunkCards(activeCards, 50);
+        const currentChunk = chunks[activeChunkIndex] || activeCards;
+        const fullScript = generateRouterOSTerminalScript(activeCards, scriptModalData.batch.profileName, {
+          activeOnly: excludeExpiredToggle,
+          safeDeduplication: true
+        });
+        const currentChunkScript = generateRouterOSTerminalScript(currentChunk, scriptModalData.batch.profileName, {
+          activeOnly: excludeExpiredToggle,
+          safeDeduplication: true
+        });
+        const rscFileName = `netflow_${scriptModalData.batch.batchNumber || scriptModalData.batch.id}_${activeCards.length}cards.rsc`;
+        const importTerminalCommand = `/import file-name="${rscFileName}"`;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] animate-scale-up">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                    <Terminal className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      أوامر المايكروتك للدفعة:
+                      <span className="font-mono text-sky-400 font-bold">{scriptModalData.batch.batchNumber}</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      إجمالي كروت الدفعة: {rawBatchCards.length} كرت | الكروت الصالحة للرفع: <span className="text-emerald-400 font-bold">{activeCards.length}</span> | البروفايل: {scriptModalData.batch.profileName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setScriptModalData(null)}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Safety & Expired Cards Protection Banner */}
+              <div className="mt-3 bg-slate-950/70 border border-slate-800 p-3 rounded-xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    <strong>نظام حماية الشبكة النشط:</strong> يمنع إعادة الكروت المنتهية أو المستهلكة للراوتر.
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-white">
+                  <input
+                    type="checkbox"
+                    checked={excludeExpiredToggle}
+                    onChange={e => setExcludeExpiredToggle(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-amber-500 bg-slate-800 border-slate-700"
+                  />
+                  <span>استبعاد الكروت المستهلكة/المنتهية ({expiredCount})</span>
+                </label>
+              </div>
+
+              {/* Import Method Tabs */}
+              <div className="mt-4 flex border-b border-slate-800">
+                <button
+                  onClick={() => setScriptViewMode('rsc_file')}
+                  className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+                    scriptViewMode === 'rsc_file'
+                      ? 'border-emerald-500 text-emerald-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>الطريقة الموصى بها للأعداد الكبيرة (ملف .rsc عبر Files)</span>
+                  <span className="px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-500/30 rounded text-[10px]">
+                    الأضمن 100% لـ 300+ كرت
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setScriptViewMode('terminal_chunks')}
+                  className={`pb-3 px-4 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+                    scriptViewMode === 'terminal_chunks'
+                      ? 'border-amber-500 text-amber-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <SplitSquareVertical className="w-4 h-4" />
+                  <span>النسخ المباشر للتيرمينال (مع التجزئة الآمنة)</span>
+                  {chunks.length > 1 && (
+                    <span className="px-1.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-500/30 rounded text-[10px]">
+                      {chunks.length} أجزاء
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Method 1: RSC File Import View */}
+              {scriptViewMode === 'rsc_file' ? (
+                <div className="py-4 flex-1 overflow-y-auto space-y-4">
+                  <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      لماذا نوصي بملف .rsc عند طباعة أو استيراد 300 كرت؟
+                    </h4>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      نافذة <strong>New Terminal</strong> في WinBox تمتلك سعة ذاكرة محدودة (Buffer)، وعند لصق 300 سطر دفعة واحدة تسقط أسطر في المنتصف وتصل الكروت ناقصة.
+                      أما استيراد الملف عبر <strong>Files</strong> فهو الطريقة الرسمية من شركة MikroTik، ويقبل <strong>آلاف الكروت دفعة واحدة في ثانية واحدة دون سقوط كرت واحد!</strong>
+                    </p>
+
+                    <div className="pt-2 border-t border-emerald-900/60 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                        <span className="font-bold text-emerald-400 block mb-1">1. نزّل الملف:</span>
+                        اضغط الزر الأخضر لتنزيل ملف ({rscFileName}).
+                      </div>
+                      <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                        <span className="font-bold text-emerald-400 block mb-1">2. ارفعه للراوتر:</span>
+                        افتح Winbox، وافتح قائمة <strong>Files</strong> واسحب الملف إليها.
+                      </div>
+                      <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                        <span className="font-bold text-emerald-400 block mb-1">3. نفّذ أمر الاستيراد:</span>
+                        في New Terminal الصق الأمر أدناه واضغط Enter.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Terminal Import Command Box */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span className="font-medium">أمر الاستيراد الفوري في New Terminal:</span>
+                      <span className="text-emerald-400 text-[11px]">يستورد الـ {activeCards.length} كرت فوراً</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-800 font-mono text-xs text-emerald-400">
+                      <span className="flex-1 select-all">{importTerminalCommand}</span>
+                      <button
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(importTerminalCommand);
+                          if (ok) {
+                            setCopiedImportCommand(true);
+                            setTimeout(() => setCopiedImportCommand(false), 3000);
+                          }
+                        }}
+                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs flex items-center gap-1.5 transition shrink-0"
+                      >
+                        {copiedImportCommand ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>تم النسخ!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>نسخ الأمر</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Download Action Bar */}
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      onClick={() => {
+                        downloadTextFile(rscFileName, fullScript);
+                        setToastNotification({
+                          message: `تم تنزيل ملف أوامر المايكروتك ${rscFileName} بنجاح!`,
+                          type: 'success'
+                        });
+                        setTimeout(() => setToastNotification(null), 3500);
+                      }}
+                      className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      تنزيل ملف .rsc للدفعة بالكامل ({activeCards.length} كرت)
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenReconcileModal(scriptModalData.batch)}
+                      className="px-4 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 font-medium rounded-xl border border-indigo-500/30 flex items-center gap-2 transition text-xs"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                      مطابقة وتأكيد الكروت في الراوتر
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Method 2: Direct Terminal Chunks View */
+                <div className="py-4 flex-1 overflow-hidden flex flex-col space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
+                    <span className="flex items-center gap-1.5 text-amber-400">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      لتجنب سقوط الأوامر في التيرمينال، تم تقسيم الكروت إلى أجزاء آمنة (50 كرت/جزء):
+                    </span>
+                    <span className="text-[11px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
+                      محمي ضد التكرار (:do on-error)
+                    </span>
+                  </div>
+
+                  {/* Chunk Selector Buttons */}
+                  {chunks.length > 1 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {chunks.map((chunk, idx) => {
+                        const start = idx * 50 + 1;
+                        const end = Math.min((idx + 1) * 50, activeCards.length);
+                        const isCopied = copiedChunkIndex === idx;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setActiveChunkIndex(idx)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 flex items-center gap-1.5 border ${
+                              activeChunkIndex === idx
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                            }`}
+                          >
+                            <span>الجزء {idx + 1} ({start}-{end})</span>
+                            {isCopied && <Check className="w-3 h-3 text-emerald-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Script Text Area */}
+                  <textarea
+                    readOnly
+                    dir="ltr"
+                    value={currentChunkScript}
+                    className="w-full flex-1 bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-emerald-400 leading-relaxed focus:outline-none focus:border-amber-500 select-all resize-none overflow-y-auto"
+                    rows={10}
+                    onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                  />
+
+                  {/* Chunk Action Bar */}
+                  <div className="flex items-center justify-between gap-3 pt-2">
+                    <button
+                      onClick={async () => {
+                        const success = await copyTextToClipboard(currentChunkScript);
+                        if (success) {
+                          setCopiedChunkIndex(activeChunkIndex);
+                          setToastNotification({
+                            message: `تم نسخ أوامر الجزء ${activeChunkIndex + 1} (${currentChunk.length} كرت) بنجاح!`,
+                            type: 'success'
+                          });
+                          setTimeout(() => {
+                            setCopiedChunkIndex(null);
+                            setToastNotification(null);
+                          }, 3500);
+                        }
+                      }}
+                      className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-amber-500/20 transition text-xs"
+                    >
+                      <Copy className="w-4 h-4" />
+                      نسخ أوامر الجزء الحالي ({currentChunk.length} كرت)
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        const success = await copyTextToClipboard(fullScript);
+                        if (success) {
+                          setToastNotification({
+                            message: `تم نسخ كافة أوامر الدفعة (${activeCards.length} كرت) إلى الحافظة!`,
+                            type: 'success'
+                          });
+                          setTimeout(() => setToastNotification(null), 3500);
+                        }
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl flex items-center gap-2 border border-slate-700 transition text-xs"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      نسخ جميع الكروت دفعة واحدة
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
+                <button
+                  onClick={() => setScriptModalData(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-medium rounded-xl transition text-xs"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Live MikroTik Cards Audit & Reconciler Modal */}
+      {reconcileModalData && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] animate-scale-up space-y-4">
+            {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
-                  <Terminal className="w-6 h-6" />
+                <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400">
+                  <ShieldCheck className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    أوامر المايكروتك للدفعة:
-                    <span className="font-mono text-sky-400 font-bold">{scriptModalData.batch.batchNumber}</span>
+                    أداة فحص ومطابقة كروت الدفعة مع المايكروتك:
+                    <span className="font-mono text-sky-400 font-bold">{reconcileModalData.batch.batchNumber}</span>
                   </h3>
-                  <p className="text-xs text-slate-400">
-                    عدد الكروت: {scriptModalData.count} كرت | البروفايل: {scriptModalData.batch.profileName}
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    اكتشف فوراً أي كروت ناقصة أو لم تصل، واستخرج سكربت الكروت المفقودة فقط بنقرة واحدة.
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setScriptModalData(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                onClick={() => setReconcileModalData(null)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="py-4 flex-1 overflow-hidden flex flex-col space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>الصق هذه الأوامر مباشرة في New Terminal في Winbox أو WebFig:</span>
-                <span className="text-[11px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                  جاهز للتشغيل في MikroTik v6 & v7
-                </span>
+            {/* Quick Step Guide */}
+            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-200">الخطوة 1: شغّل هذا الأمر في تيرمينال المايكروتك لسرد أسماء الكروت:</span>
+                <button
+                  onClick={async () => {
+                    const cmd = '/ip hotspot user print terse';
+                    const ok = await copyTextToClipboard(cmd);
+                    if (ok) {
+                      setToastNotification({
+                        message: 'تم نسخ أمر طباعة المستخدمين للمايكروتك!',
+                        type: 'success'
+                      });
+                      setTimeout(() => setToastNotification(null), 3000);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-indigo-950 text-indigo-300 border border-indigo-500/30 rounded text-[11px] hover:bg-indigo-900 transition flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" />
+                  نسخ الأمر
+                </button>
               </div>
+              <div className="bg-slate-900 p-2 rounded font-mono text-indigo-300 text-[11px] select-all">
+                /ip hotspot user print terse
+              </div>
+              <p className="text-slate-400 text-[11px]">
+                الخطوة 2: حدد الناتج من شاشة المايكروتك وانسخه، ثم الصقه في الصندوق أدناه واضغط <strong>&quot;فحص ومطابقة&quot;</strong>.
+              </p>
+            </div>
+
+            {/* Input Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-300 block">
+                ألصق هنا ناتج شاشة المايكروتك (أو أسماء الكروت الموجودة في الراوتر):
+              </label>
               <textarea
-                readOnly
                 dir="ltr"
-                value={scriptModalData.script}
-                className="w-full flex-1 bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-emerald-400 leading-relaxed focus:outline-none focus:border-amber-500 select-all resize-none overflow-y-auto"
-                rows={12}
-                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                value={reconcileInput}
+                onChange={e => setReconcileInput(e.target.value)}
+                placeholder={`0 R name="1001" profile="default" ...\n1 R name="1002" profile="default" ...`}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none h-28"
               />
             </div>
 
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+            {/* Run Button */}
+            <div className="flex items-center justify-between">
               <button
-                onClick={async () => {
-                  const success = await copyTextToClipboard(scriptModalData.script);
-                  if (success) {
-                    setCopiedBatchScript(scriptModalData.batch.id);
-                    setToastNotification({
-                      message: 'تم نسخ جميع أوامر المايكروتك إلى الحافظة بنجاح!',
-                      type: 'success'
-                    });
-                    setTimeout(() => setToastNotification(null), 3500);
-                  }
-                }}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-amber-500/20 transition"
+                onClick={handleRunReconciliation}
+                disabled={isReconciling || !reconcileInput.trim()}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-indigo-600/20 transition"
               >
-                <Copy className="w-4 h-4" />
-                نسخ جميع الأوامر
+                {isReconciling ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    جاري الفحص والمطابقة...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    بدء فحص ومطابقة الكروت الآن
+                  </>
+                )}
               </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const fileName = `mikrotik_batch_${scriptModalData.batch.batchNumber || scriptModalData.batch.id}_${scriptModalData.count}cards.rsc`;
-                    downloadTextFile(fileName, scriptModalData.script);
-                    setToastNotification({
-                      message: `تم تنزيل ملف السكربت ${fileName} بنجاح!`,
-                      type: 'success'
-                    });
-                    setTimeout(() => setToastNotification(null), 3500);
-                  }}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl flex items-center gap-2 border border-slate-700 transition"
-                >
-                  <Download className="w-4 h-4 text-emerald-400" />
-                  تنزيل ملف .rsc
-                </button>
-                <button
-                  onClick={() => setScriptModalData(null)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-medium rounded-xl transition"
-                >
-                  إغلاق
-                </button>
+              {reconcileResult && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">إجمالي المفحوص: {reconcileResult.totalChecked}</span>
+                  <span className="text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                    موجود: {reconcileResult.foundCodes.length}
+                  </span>
+                  <span className={`font-bold px-2 py-0.5 rounded border ${
+                    reconcileResult.missingCards.length === 0
+                      ? 'text-slate-400 bg-slate-800 border-slate-700'
+                      : 'text-rose-400 bg-rose-950/60 border-rose-500/30'
+                  }`}>
+                    مفقود: {reconcileResult.missingCards.length}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Results Display */}
+            {reconcileResult && (
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                {reconcileResult.missingCards.length === 0 ? (
+                  <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 flex items-center gap-3">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-300">
+                        كافة كروت الدفعة موجودة بنسبة 100% في المايكروتك!
+                      </h4>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        تم التأكد من وجود جميع الكروت ({reconcileResult.foundCodes.length} كرت). يمكنك طباعة وتوزيع الكروت بأمان تام واطمئنان.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-rose-950/30 border border-rose-500/40 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                        <h4 className="text-sm font-bold text-rose-300">
+                          تم اكتشاف {reconcileResult.missingCards.length} كرت مفقود لم يدخل المايكروتك!
+                        </h4>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const missingScript = generateRouterOSTerminalScript(
+                            reconcileResult.missingCards,
+                            reconcileModalData.batch.profileName,
+                            { activeOnly: true, safeDeduplication: true }
+                          );
+                          const ok = await copyTextToClipboard(missingScript);
+                          if (ok) {
+                            setCopiedMissingScript(true);
+                            setToastNotification({
+                              message: `تم نسخ أوامر الكروت المفقودة فقط (${reconcileResult.missingCards.length} كرت) بنجاح!`,
+                              type: 'success'
+                            });
+                            setTimeout(() => {
+                              setCopiedMissingScript(false);
+                              setToastNotification(null);
+                            }, 3500);
+                          }
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        {copiedMissingScript ? 'تم النسخ!' : 'نسخ سكربت الكروت المفقودة فقط'}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      هذه الميزة تحميك من تكرار الكروت أو إعادة الكروت المنتهية: يمكنك الآن ببساطة نسخ سكربت الكروت المفقودة فقط ولصقه في المايكروتك لإكمال النقص دون أي تأثير على بقية الكروت!
+                    </p>
+
+                    {/* Preview of missing codes */}
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 max-h-24 overflow-y-auto font-mono text-[11px] text-amber-300 flex flex-wrap gap-1.5">
+                      {reconcileResult.missingCards.map((c, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
+                          {c.code || c.username}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+            )}
+
+            {/* Modal Close */}
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setReconcileModalData(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition text-xs font-medium"
+              >
+                إغلاق
+              </button>
             </div>
           </div>
         </div>
