@@ -16,6 +16,7 @@ import {
 } from '@/types';
 
 export type { AppState };
+export { DEFAULT_TEMPLATES } from './templates';
 import { DEFAULT_TEMPLATES } from './templates';
 import {
   ensureAuth,
