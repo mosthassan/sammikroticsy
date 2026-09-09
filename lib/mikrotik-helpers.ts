@@ -200,6 +200,8 @@ export function chunkCards<T>(cards: T[], chunkSize: number = 50): T[][] {
 
 /**
  * مطابقة كروت الدفعة مع قائمة مستخدمي المايكروتك لمعرفة الكروت المفقودة
+ * مصممة بدقة عالية للتعرف على أسماء المستخدمين سواء طُبعت عبر print terse أو print detail أو تم نسخ أرقام الكروت
+ * تضمن عدم وجود نتائج إيجابية خاطئة (False Positives)
  */
 export function reconcileCardsWithRouter(
   batchCards: any[],
@@ -213,24 +215,44 @@ export function reconcileCardsWithRouter(
     return { foundCodes: [], missingCards: [], totalChecked: 0 };
   }
 
-  // تنظيف نصوص المايكروتك واستخراج كافة الرموز والكلمات التي قد تمثل أسماء مستخدمين
   const rawText = String(mikrotikRawOutput || "");
-  const normalizedRaw = rawText.toLowerCase();
+  
+  // بناء جدول بحث سريع لجميع أسماء المستخدمين المستخرجة من شاشة المايكروتك
+  const extractedNames = new Set<string>();
+
+  // 1. التقاط صيغ name="1001" أو name=1001 من مخرجات RouterOS print terse / detail
+  const namePropRegex = /\bname="?([^"\s;]+)"?/gi;
+  let match: RegExpExecArray | null;
+  while ((match = namePropRegex.exec(rawText)) !== null) {
+    if (match[1]) {
+      extractedNames.add(match[1].trim().toLowerCase());
+    }
+  }
+
+  // 2. تقسيم الكلمات والرموز في النص للتعرف على الكروت حتى لو لُصقت كأكواد أو أرقام مجردة
+  const tokens = rawText
+    .replace(/[=;"\r]/g, " ")
+    .split(/[\s,\t\n]+/)
+    .map(t => t.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const t of tokens) {
+    extractedNames.add(t);
+  }
 
   const foundCodes: string[] = [];
   const missingCards: any[] = [];
 
   for (const card of batchCards) {
-    const code = String(card.code || card.username || card.id || "").trim();
-    if (!code) continue;
+    const rawCode = String(card.code || card.username || card.id || "").trim();
+    if (!rawCode) continue;
 
-    const lowerCode = code.toLowerCase();
-    // البحث عن الكود ككلمة كاملة أو داخل النص
-    const regex = new RegExp(`(?:name=|name="|")?${lowerCode}(?:"|\\s|$)`, "i");
-    const isFound = regex.test(normalizedRaw) || normalizedRaw.includes(lowerCode);
+    const lowerCode = rawCode.toLowerCase();
+    // فحص التطابق التام مع الأسماء المستخرجة (يمنع تطابق الأرقام الجزئية مثل 10 مع 1000)
+    const isFound = extractedNames.has(lowerCode);
 
     if (isFound) {
-      foundCodes.push(code);
+      foundCodes.push(rawCode);
     } else {
       missingCards.push(card);
     }

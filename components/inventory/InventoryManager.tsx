@@ -82,6 +82,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     batch: CardBatch;
     cards: Card[];
   } | null>(null);
+  const [reconcileFilterMode, setReconcileFilterMode] = useState<'batch' | 'in_router_script' | 'profile' | 'all'>('batch');
   const [reconcileInput, setReconcileInput] = useState<string>('');
   const [isReconciling, setIsReconciling] = useState<boolean>(false);
   const [reconcileResult, setReconcileResult] = useState<{
@@ -361,6 +362,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       batch,
       cards: batchCards
     });
+    setReconcileFilterMode('batch');
     setReconcileInput('');
     setReconcileResult(null);
     setCopiedMissingScript(false);
@@ -1073,194 +1075,299 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       })()}
 
       {/* Live MikroTik Cards Audit & Reconciler Modal */}
-      {reconcileModalData && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] animate-scale-up space-y-4">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    أداة فحص ومطابقة كروت الدفعة مع المايكروتك:
-                    <span className="font-mono text-sky-400 font-bold">{reconcileModalData.batch.batchNumber}</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    اكتشف فوراً أي كروت ناقصة أو لم تصل، واستخرج سكربت الكروت المفقودة فقط بنقرة واحدة.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setReconcileModalData(null)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
-              >
-                ✕
-              </button>
-            </div>
+      {reconcileModalData && (() => {
+        const batchNum = reconcileModalData.batch.batchNumber || reconcileModalData.batch.id || '';
+        const cleanBatchNum = batchNum.replace(/^B-?/i, '').trim();
+        const profileName = reconcileModalData.batch.profileName || 'default';
 
-            {/* Quick Step Guide */}
-            <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-200">الخطوة 1: شغّل هذا الأمر في تيرمينال المايكروتك لسرد أسماء الكروت:</span>
+        // 1. Specific command by batch comment (excludes all other router users):
+        const batchSpecificCmd = `/ip hotspot user print terse where comment~"${cleanBatchNum || batchNum}"`;
+
+        // 2. Specific command by profile:
+        const profileSpecificCmd = `/ip hotspot user print terse where profile="${profileName}"`;
+
+        // 3. All router users command:
+        const allUsersCmd = `/ip hotspot user print terse`;
+
+        // 4. In-router live self-audit diagnostic script (checks batch users directly inside RouterOS):
+        const batchCodes = reconcileModalData.cards.map(c => c.code || c.username).filter(Boolean);
+        const inRouterScript = `:local tot ${batchCodes.length}; :local miss 0; :foreach u in={${batchCodes.map(c => `"${c}"`).join(',')}} do={ :if ([:len [/ip hotspot user find name=$u]] = 0) do={ :set miss ($miss + 1); :put ("MISSING: " . $u) } }; :if ($miss = 0) do={ :put ("SUCCESS: All " . $tot . " cards exist in MikroTik!") } else={ :put ("ALERT: " . $miss . " cards are MISSING!") };`;
+
+        let activeCommandToRun = batchSpecificCmd;
+        if (reconcileFilterMode === 'profile') activeCommandToRun = profileSpecificCmd;
+        else if (reconcileFilterMode === 'in_router_script') activeCommandToRun = inRouterScript;
+        else if (reconcileFilterMode === 'all') activeCommandToRun = allUsersCmd;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] animate-scale-up space-y-4">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      أداة فحص ومطابقة كروت الدفعة:
+                      <span className="font-mono text-sky-400 font-bold">{batchNum}</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      مطابقة دقيقة ومخصصة لكروت الدفعة فقط لعزل أي نقص واستخراج سكربت الكروت المفقودة.
+                    </p>
+                  </div>
+                </div>
                 <button
-                  onClick={async () => {
-                    const cmd = '/ip hotspot user print terse';
-                    const ok = await copyTextToClipboard(cmd);
-                    if (ok) {
-                      setToastNotification({
-                        message: 'تم نسخ أمر طباعة المستخدمين للمايكروتك!',
-                        type: 'success'
-                      });
-                      setTimeout(() => setToastNotification(null), 3000);
-                    }
-                  }}
-                  className="px-2.5 py-1 bg-indigo-950 text-indigo-300 border border-indigo-500/30 rounded text-[11px] hover:bg-indigo-900 transition flex items-center gap-1"
+                  onClick={() => setReconcileModalData(null)}
+                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition"
                 >
-                  <Copy className="w-3 h-3" />
-                  نسخ الأمر
+                  ✕
                 </button>
               </div>
-              <div className="bg-slate-900 p-2 rounded font-mono text-indigo-300 text-[11px] select-all">
-                /ip hotspot user print terse
+
+              {/* Filtering Mode Tabs */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  اختر طريقة استعلام المايكروتك المرغوبة:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setReconcileFilterMode('batch')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
+                      reconcileFilterMode === 'batch'
+                        ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>فلترة برقم الدفعة</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      يجلب كروت {batchNum} فقط ويستبعد البقية
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setReconcileFilterMode('in_router_script')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
+                      reconcileFilterMode === 'in_router_script'
+                        ? 'bg-amber-600/20 text-amber-300 border-amber-500 shadow-md ring-1 ring-amber-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Terminal className="w-3.5 h-3.5 text-amber-400" />
+                      <span>فحص فوري داخل الراوتر</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      المايكروتك يفحص الدفعة ويطبع النتيجة
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setReconcileFilterMode('all')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right col-span-2 sm:col-span-1 ${
+                      reconcileFilterMode === 'all'
+                        ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <CircleDot className="w-3.5 h-3.5 text-sky-400" />
+                      <span>سرد كافة المستخدمين</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      المنصة تعزل وتفحص {batchNum} فقط
+                    </span>
+                  </button>
+                </div>
               </div>
-              <p className="text-slate-400 text-[11px]">
-                الخطوة 2: حدد الناتج من شاشة المايكروتك وانسخه، ثم الصقه في الصندوق أدناه واضغط <strong>&quot;فحص ومطابقة&quot;</strong>.
-              </p>
-            </div>
 
-            {/* Input Textarea */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300 block">
-                ألصق هنا ناتج شاشة المايكروتك (أو أسماء الكروت الموجودة في الراوتر):
-              </label>
-              <textarea
-                dir="ltr"
-                value={reconcileInput}
-                onChange={e => setReconcileInput(e.target.value)}
-                placeholder={`0 R name="1001" profile="default" ...\n1 R name="1002" profile="default" ...`}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none h-28"
-              />
-            </div>
-
-            {/* Run Button */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={handleRunReconciliation}
-                disabled={isReconciling || !reconcileInput.trim()}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-indigo-600/20 transition"
-              >
-                {isReconciling ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    جاري الفحص والمطابقة...
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    بدء فحص ومطابقة الكروت الآن
-                  </>
-                )}
-              </button>
-
-              {reconcileResult && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400">إجمالي المفحوص: {reconcileResult.totalChecked}</span>
-                  <span className="text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                    موجود: {reconcileResult.foundCodes.length}
+              {/* Quick Step Guide with LTR Code Preview */}
+              <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                    <span>الخطوة 1: شغّل هذا الأمر في New Terminal بالمايكروتك:</span>
+                    {reconcileFilterMode === 'batch' && (
+                      <span className="text-[10px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                        مخصص للدفعة {batchNum} فقط
+                      </span>
+                    )}
                   </span>
-                  <span className={`font-bold px-2 py-0.5 rounded border ${
-                    reconcileResult.missingCards.length === 0
-                      ? 'text-slate-400 bg-slate-800 border-slate-700'
-                      : 'text-rose-400 bg-rose-950/60 border-rose-500/30'
-                  }`}>
-                    مفقود: {reconcileResult.missingCards.length}
+                  <button
+                    onClick={async () => {
+                      const ok = await copyTextToClipboard(activeCommandToRun);
+                      if (ok) {
+                        setToastNotification({
+                          message: 'تم نسخ أمر المايكروتك إلى الحافظة بنجاح!',
+                          type: 'success'
+                        });
+                        setTimeout(() => setToastNotification(null), 3000);
+                      }
+                    }}
+                    className="px-2.5 py-1 bg-indigo-950 text-indigo-300 border border-indigo-500/30 rounded text-[11px] hover:bg-indigo-900 transition flex items-center gap-1 shrink-0"
+                  >
+                    <Copy className="w-3 h-3" />
+                    نسخ الأمر
+                  </button>
+                </div>
+
+                {/* Explicit LTR Left-Aligned Code Box */}
+                <div
+                  dir="ltr"
+                  className="bg-slate-900 p-2.5 rounded-lg font-mono text-indigo-300 text-xs text-left select-all overflow-x-auto whitespace-pre-wrap break-all border border-slate-800"
+                >
+                  {activeCommandToRun}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                  <span>
+                    {reconcileFilterMode === 'in_router_script'
+                      ? 'الخطوة 2: الصق السكربت واضغط Enter، وسيخبرك المايكروتك فوراً هل جميع الكروت موجودة أم مفقودة.'
+                      : 'الخطوة 2: انسخ الناتج من شاشة المايكروتك والصقه أدناه، ثم اضغط "بدء فحص ومطابقة الكروت".'}
+                  </span>
+                  <span className="text-emerald-400/90 font-medium">
+                    (تطابق حصري مع كروت الدفعة {batchNum})
                   </span>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Results Display */}
-            {reconcileResult && (
-              <div className="space-y-3 pt-2 border-t border-slate-800">
-                {reconcileResult.missingCards.length === 0 ? (
-                  <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 flex items-center gap-3">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-                    <div>
-                      <h4 className="text-sm font-bold text-emerald-300">
-                        كافة كروت الدفعة موجودة بنسبة 100% في المايكروتك!
-                      </h4>
-                      <p className="text-xs text-slate-300 mt-0.5">
-                        تم التأكد من وجود جميع الكروت ({reconcileResult.foundCodes.length} كرت). يمكنك طباعة وتوزيع الكروت بأمان تام واطمئنان.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-rose-950/30 border border-rose-500/40 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-                        <h4 className="text-sm font-bold text-rose-300">
-                          تم اكتشاف {reconcileResult.missingCards.length} كرت مفقود لم يدخل المايكروتك!
-                        </h4>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const missingScript = generateRouterOSTerminalScript(
-                            reconcileResult.missingCards,
-                            reconcileModalData.batch.profileName,
-                            { activeOnly: true, safeDeduplication: true }
-                          );
-                          const ok = await copyTextToClipboard(missingScript);
-                          if (ok) {
-                            setCopiedMissingScript(true);
-                            setToastNotification({
-                              message: `تم نسخ أوامر الكروت المفقودة فقط (${reconcileResult.missingCards.length} كرت) بنجاح!`,
-                              type: 'success'
-                            });
-                            setTimeout(() => {
-                              setCopiedMissingScript(false);
-                              setToastNotification(null);
-                            }, 3500);
-                          }
-                        }}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        {copiedMissingScript ? 'تم النسخ!' : 'نسخ سكربت الكروت المفقودة فقط'}
-                      </button>
-                    </div>
+              {/* Input Textarea (Hidden if in-router script is selected, or optional) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                  <span>ألصق هنا ناتج شاشة المايكروتك لمطابقته وفصل الكروت المفقودة:</span>
+                  <span className="text-[11px] text-slate-500 font-normal">
+                    (حتى لو لُصقت أسماء كل مستخدمي الراوتر، المنصة ستبحث فقط عن كروت {batchNum})
+                  </span>
+                </label>
+                <textarea
+                  dir="ltr"
+                  value={reconcileInput}
+                  onChange={e => setReconcileInput(e.target.value)}
+                  placeholder={`0 R name="1001" comment="NetFlow-${cleanBatchNum || 'B-714'}" ...\n1 R name="1002" comment="NetFlow-${cleanBatchNum || 'B-714'}" ...`}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none h-24"
+                />
+              </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      هذه الميزة تحميك من تكرار الكروت أو إعادة الكروت المنتهية: يمكنك الآن ببساطة نسخ سكربت الكروت المفقودة فقط ولصقه في المايكروتك لإكمال النقص دون أي تأثير على بقية الكروت!
-                    </p>
+              {/* Run Button */}
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={handleRunReconciliation}
+                  disabled={isReconciling || !reconcileInput.trim()}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-indigo-600/20 transition"
+                >
+                  {isReconciling ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      جاري الفحص والمطابقة...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      بدء فحص ومطابقة الكروت الآن
+                    </>
+                  )}
+                </button>
 
-                    {/* Preview of missing codes */}
-                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 max-h-24 overflow-y-auto font-mono text-[11px] text-amber-300 flex flex-wrap gap-1.5">
-                      {reconcileResult.missingCards.map((c, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
-                          {c.code || c.username}
-                        </span>
-                      ))}
-                    </div>
+                {reconcileResult && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400">إجمالي كروت الدفعة: {reconcileResult.totalChecked}</span>
+                    <span className="text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                      موجود: {reconcileResult.foundCodes.length}
+                    </span>
+                    <span className={`font-bold px-2 py-0.5 rounded border ${
+                      reconcileResult.missingCards.length === 0
+                        ? 'text-slate-400 bg-slate-800 border-slate-700'
+                        : 'text-rose-400 bg-rose-950/60 border-rose-500/30'
+                    }`}>
+                      مفقود: {reconcileResult.missingCards.length}
+                    </span>
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Modal Close */}
-            <div className="pt-2 border-t border-slate-800 flex justify-end">
-              <button
-                onClick={() => setReconcileModalData(null)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition text-xs font-medium"
-              >
-                إغلاق
-              </button>
+              {/* Results Display */}
+              {reconcileResult && (
+                <div className="space-y-3 pt-2 border-t border-slate-800">
+                  {reconcileResult.missingCards.length === 0 ? (
+                    <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 flex items-center gap-3">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-bold text-emerald-300">
+                          كافة كروت الدفعة {batchNum} موجودة بنسبة 100% في المايكروتك!
+                        </h4>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          تم التأكد من وجود جميع الكروت ({reconcileResult.foundCodes.length} كرت). يمكنك طباعة وتوزيع الكروت بأمان تام واطمئنان.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-950/30 border border-rose-500/40 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                          <h4 className="text-sm font-bold text-rose-300">
+                            تم اكتشاف {reconcileResult.missingCards.length} كرت مفقود من أصل {reconcileResult.totalChecked} كرت!
+                          </h4>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const missingScript = generateRouterOSTerminalScript(
+                              reconcileResult.missingCards,
+                              reconcileModalData.batch.profileName,
+                              { activeOnly: true, safeDeduplication: true }
+                            );
+                            const ok = await copyTextToClipboard(missingScript);
+                            if (ok) {
+                              setCopiedMissingScript(true);
+                              setToastNotification({
+                                message: `تم نسخ أوامر الكروت المفقودة فقط (${reconcileResult.missingCards.length} كرت) بنجاح!`,
+                                type: 'success'
+                              });
+                              setTimeout(() => {
+                                setCopiedMissingScript(false);
+                                setToastNotification(null);
+                              }, 3500);
+                            }
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          {copiedMissingScript ? 'تم النسخ!' : 'نسخ سكربت الكروت المفقودة فقط'}
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        هذه الميزة تحميك من تكرار الكروت أو إعادة الكروت المنتهية: يمكنك الآن ببساطة نسخ سكربت الكروت المفقودة فقط ولصقه في المايكروتك لإكمال النقص دون أي تأثير على بقية الكروت!
+                      </p>
+
+                      {/* Preview of missing codes */}
+                      <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 max-h-24 overflow-y-auto font-mono text-[11px] text-amber-300 flex flex-wrap gap-1.5">
+                        {reconcileResult.missingCards.map((c, i) => (
+                          <span key={i} className="px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
+                            {c.code || c.username}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Modal Close */}
+              <div className="pt-2 border-t border-slate-800 flex justify-end">
+                <button
+                  onClick={() => setReconcileModalData(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition text-xs font-medium"
+                >
+                  إغلاق
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
