@@ -38,6 +38,18 @@ export function formatUptimeLimit(input: string | number | null | undefined): st
   let val = String(input).trim();
   if (!val) return "";
 
+  // إذا كان الوقت غير محدد أو مفتوح أو بدون حد
+  if (
+    /غير\s*محد[ود]/i.test(val) ||
+    /مفتوح/i.test(val) ||
+    /بدون\s*حد/i.test(val) ||
+    val === "0" ||
+    val === "0s" ||
+    val.toLowerCase() === "unlimited"
+  ) {
+    return "0s";
+  }
+
   val = val
     .replace(/أيام|ايام|يوم|days|day|d/gi, "d")
     .replace(/ساعات|ساعة|hours|hour|h/gi, "h")
@@ -170,16 +182,23 @@ export function generateRouterOSTerminalScript(
 
     const rawUptime = card.uptimeDisplay || card.limitUptime || card.uptimeLimit || "";
     const formattedUptime = formatUptimeLimit(rawUptime);
-    const limitUptime = formattedUptime && formattedUptime !== "" ? formattedUptime : "0";
+    const isUnlimitedUptime =
+      !formattedUptime ||
+      formattedUptime === "0" ||
+      formattedUptime === "0s" ||
+      /غير\s*محد[ود]/i.test(rawUptime) ||
+      /مفتوح/i.test(rawUptime);
+
+    const uptimeClause = isUnlimitedUptime ? "" : ` limit-uptime=${formattedUptime}`;
 
     if (options.safeDeduplication !== false) {
       // حماية فائقة: التأكد من عدم وجود الكرت مسبقاً، وتغليف الأمر بـ on-error لمنع توقف السكربت نهائياً
       lines.push(
-        `:do { :if ([:len [/ip hotspot user find name="${safeCode}"]] = 0) do={ /ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}" } } on-error={}`
+        `:do { :if ([:len [/ip hotspot user find name="${safeCode}"]] = 0) do={ /ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes}${uptimeClause} server=all comment="${batchId}" } } on-error={}`
       );
     } else {
       lines.push(
-        `/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"`
+        `/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes}${uptimeClause} server=all comment="${batchId}"`
       );
     }
   }

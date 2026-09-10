@@ -42,8 +42,11 @@ import {
   loadTemplatesFromFirestore,
   subscribeTemplates,
   seedInitialDataIfEmpty,
-  DEFAULT_ADMIN_EMAIL
+  DEFAULT_ADMIN_EMAIL,
+  updateBatchQuantityAndCards
 } from './firestore-service';
+
+export { updateBatchQuantityAndCards } from './firestore-service';
 
 const STORAGE_KEY = 'netflow_saas_data_v3';
 

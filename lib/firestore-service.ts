@@ -751,6 +751,87 @@ export async function deleteBatchAndCards(
   }
 }
 
+export async function updateBatchQuantityAndCards(
+  tenantId: string,
+  batchId: string,
+  newQuantity: number,
+  cardsToKeep: Card[],
+  cardIdsToDelete: string[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await ensureAuth();
+    const nowIso = new Date().toISOString();
+
+    // 1. Fetch current batch document to preserve settings
+    const batchRef = doc(db, 'tenants', tenantId, 'batches', batchId);
+    const snap = await getDoc(batchRef);
+    let existingData: any = {};
+    if (snap.exists()) {
+      existingData = snap.data();
+    }
+
+    const unitPrice = existingData.unitPrice || 0;
+    const wholesalePrice = existingData.wholesalePrice || 0;
+    const inStockCount = cardsToKeep.filter(c => c.status === 'in_stock').length;
+    const distributedCount = cardsToKeep.filter(c => c.status === 'distributed').length;
+    const usedCount = cardsToKeep.filter(c => c.status === 'used').length;
+
+    const formattedCards = cardsToKeep.map(c => ({
+      id: c.id,
+      username: c.code || c.id,
+      password: c.password || c.code || '',
+      profile: c.profileName || existingData.profileName || 'default',
+      limitBytesTotal: formatByteLimit(c.byteLimit || c.byteDisplay),
+      limitUptime: formatUptimeLimit(c.uptimeLimit || c.uptimeDisplay),
+      comment: sanitizeRouterOSComment(`NetFlow_${existingData.batchNumber || 'Batch'}_${c.price || 0}`),
+      code: c.code,
+      price: c.price || unitPrice,
+      wholesalePrice: c.wholesalePrice || wholesalePrice,
+      uptimeDisplay: c.uptimeDisplay,
+      byteDisplay: c.byteDisplay,
+      status: c.status || 'in_stock',
+      qrData: c.qrData || ''
+    }));
+
+    const updatePayload = {
+      ...existingData,
+      quantity: newQuantity,
+      totalCards: newQuantity,
+      inStockCount,
+      distributedCount,
+      usedCount,
+      totalRetailValue: newQuantity * unitPrice,
+      totalWholesaleValue: newQuantity * wholesalePrice,
+      cards: formattedCards,
+      updatedAt: nowIso
+    };
+
+    await setDoc(batchRef, sanitizeForFirestore(updatePayload), { merge: true });
+    try {
+      await setDoc(doc(db, 'batches', batchId), sanitizeForFirestore(updatePayload), { merge: true });
+    } catch {}
+
+    // 2. Delete unwanted card documents in chunks
+    if (cardIdsToDelete && cardIdsToDelete.length > 0) {
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < cardIdsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = cardIdsToDelete.slice(i, i + CHUNK_SIZE);
+        const writeChunk = writeBatch(db);
+        for (const cId of chunk) {
+          const cardDocRef = doc(db, 'tenants', tenantId, 'cards', cId);
+          writeChunk.delete(cardDocRef);
+        }
+        await writeChunk.commit();
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.warn('Firestore updateBatchQuantity error:', error?.message || error);
+    return { success: false, error: error?.message || 'فشل تحديث كمية الدفعة' };
+  }
+}
+
 // ==========================================
 // 4. Invoices & Transactional Distribution
 // ==========================================

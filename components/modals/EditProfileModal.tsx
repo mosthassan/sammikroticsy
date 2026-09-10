@@ -49,6 +49,7 @@ const DATA_PRESETS = [
 ];
 
 const UPTIME_PRESETS = [
+  { label: 'غير محدد (مفتوح)', val: 'غير محدد', limit: '0s' },
   { label: '2 ساعة', val: '2 ساعة', limit: '2h' },
   { label: '6 ساعات', val: '6 ساعات', limit: '6h' },
   { label: '12 ساعة', val: '12 ساعة', limit: '12h' },
@@ -138,13 +139,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       setError('تنبيه: سعر الجملة للبقالة أعلى من سعر البيع للجمهور!');
     }
 
+    const isUnlimitedUptime = !uptimeDisplay.trim() || /غير\s*محد[ود]/i.test(uptimeDisplay) || /مفتوح/i.test(uptimeDisplay) || uptimeDisplay.trim() === '0';
+    const finalUptimeDisplay = isUnlimitedUptime ? 'غير محدد' : uptimeDisplay.trim();
+    const finalUptimeLimit = isUnlimitedUptime ? '0s' : (uptimeLimit.trim() || '1d');
+
     const updatedProfile: Profile = {
       id: profile ? profile.id : `prof_${Date.now()}`,
       tenantId: tenant.id,
       name: name.trim(),
       rateLimit: 'عامة (اختيار المشترك)',
-      uptimeDisplay: uptimeDisplay.trim() || '24 ساعة',
-      uptimeLimit: uptimeLimit.trim() || '1d',
+      uptimeDisplay: finalUptimeDisplay,
+      uptimeLimit: finalUptimeLimit,
       byteDisplay: byteDisplay.trim() || '1 جيجابايت',
       byteLimit: byteLimit.trim() || '1073741824',
       price: Number(price),
@@ -322,35 +327,57 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Uptime Limit */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>الوقت المتاح للمشترك</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>الوقت المتاح للمشترك</span>
+                </label>
+                {(uptimeDisplay === 'غير محدد' || uptimeDisplay === 'غير محدود' || uptimeDisplay === 'مفتوح' || uptimeLimit === '0s') && (
+                  <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/70 border border-emerald-500/30 px-2 py-0.5 rounded-full animate-in fade-in">
+                    مفتوح (حسب الرصيد فقط)
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 value={uptimeDisplay}
-                onChange={e => setUptimeDisplay(e.target.value)}
-                placeholder="24 ساعة"
+                onChange={e => {
+                  const val = e.target.value;
+                  setUptimeDisplay(val);
+                  if (/غير\s*محد[ود]/i.test(val) || /مفتوح/i.test(val) || val === '0') {
+                    setUptimeLimit('0s');
+                  }
+                }}
+                placeholder="24 ساعة أو غير محدد"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
               />
               <div className="flex flex-wrap gap-1 pt-1">
-                {UPTIME_PRESETS.slice(0, 4).map(p => (
-                  <button
-                    key={p.val}
-                    type="button"
-                    onClick={() => {
-                      setUptimeDisplay(p.val);
-                      setUptimeLimit(p.limit);
-                    }}
-                    className={`text-[10px] px-1.5 py-0.5 rounded border transition ${
-                      uptimeDisplay === p.val
-                        ? 'bg-amber-600 text-white border-amber-500'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+                {UPTIME_PRESETS.map(p => {
+                  const isSelected =
+                    uptimeDisplay === p.val ||
+                    (p.limit === '0s' && (uptimeDisplay === 'غير محدد' || uptimeDisplay === 'غير محدود' || uptimeDisplay === 'مفتوح'));
+                  return (
+                    <button
+                      key={p.val}
+                      type="button"
+                      onClick={() => {
+                        setUptimeDisplay(p.val);
+                        setUptimeLimit(p.limit);
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition font-medium ${
+                        isSelected
+                          ? p.limit === '0s'
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                            : 'bg-amber-600 text-white border-amber-500 shadow-sm'
+                          : p.limit === '0s'
+                          ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/50 hover:border-emerald-400'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

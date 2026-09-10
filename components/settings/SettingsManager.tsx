@@ -34,6 +34,7 @@ import { TeamManager } from './TeamManager';
 import { EditProfileModal } from '@/components/modals/EditProfileModal';
 import { SubscriptionPlansCard } from './SubscriptionPlansCard';
 import { testFirestoreConnection } from '@/lib/firestore-service';
+import { formatUptimeLimit } from '@/lib/mikrotik-helpers';
 import { appStore } from '@/lib/store';
 
 interface SettingsManagerProps {
@@ -188,13 +189,21 @@ service cloud.firestore {
     e.preventDefault();
     if (!newProfileName.trim()) return;
 
+    const isUnlimited =
+      !newUptime.trim() ||
+      /غير\s*محد[ود]/i.test(newUptime) ||
+      /مفتوح/i.test(newUptime) ||
+      newUptime.trim() === '0';
+    const computedUptimeDisplay = isUnlimited ? 'غير محدد' : newUptime.trim();
+    const computedUptimeLimit = isUnlimited ? '0s' : (formatUptimeLimit(newUptime) || '1d');
+
     const newProf: Profile = {
       id: `prof_${Date.now()}`,
       tenantId: tenant.id,
       name: newProfileName.trim(),
       rateLimit: 'عامة (اختيار المشترك)',
-      uptimeLimit: '1d',
-      uptimeDisplay: newUptime,
+      uptimeLimit: computedUptimeLimit,
+      uptimeDisplay: computedUptimeDisplay,
       byteLimit: '2147483648',
       byteDisplay: newByte,
       price: newPrice,
@@ -546,14 +555,46 @@ service cloud.firestore {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 mb-1">الوقت المتاح للمشترك</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 text-xs font-medium">الوقت المتاح للمشترك</label>
+                    {(newUptime === 'غير محدد' || /غير\s*محد[ود]/i.test(newUptime) || newUptime === 'مفتوح') && (
+                      <span className="text-[10px] text-emerald-400 font-medium">مفتوح بدون حد</span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={newUptime}
                     onChange={e => setNewUptime(e.target.value)}
-                    placeholder="مثال: 24 ساعة"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none"
+                    placeholder="مثال: 24 ساعة أو غير محدد"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none text-xs"
                   />
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {[
+                      { label: 'غير محدد', val: 'غير محدد' },
+                      { label: '6 ساعات', val: '6 ساعات' },
+                      { label: '12 ساعة', val: '12 ساعة' },
+                      { label: '24 ساعة', val: '24 ساعة' },
+                      { label: '3 أيام', val: '3 أيام' },
+                      { label: '7 أيام', val: '7 أيام' }
+                    ].map(p => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        onClick={() => setNewUptime(p.val)}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                          newUptime === p.val
+                            ? p.val === 'غير محدد'
+                              ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
+                              : 'bg-amber-600 text-white border-amber-500 font-bold'
+                            : p.val === 'غير محدد'
+                            ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/50'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

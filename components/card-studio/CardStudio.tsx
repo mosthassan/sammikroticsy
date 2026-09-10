@@ -746,9 +746,12 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
         const cardProf = resolveRouterOSProfile(c.profileName?.split(' ')[0] || cleanProf, 'default');
         const limitBytes = formatByteLimit(c.byteDisplay) || '0';
-        const limitUptime = formatUptimeLimit(c.uptimeDisplay) || '0';
+        const rawUptime = c.uptimeDisplay || '';
+        const limitUptime = formatUptimeLimit(rawUptime);
+        const isUnlimited = !limitUptime || limitUptime === '0' || limitUptime === '0s' || /غير\s*محد[ود]/i.test(rawUptime) || /مفتوح/i.test(rawUptime);
+        const uptimeParam = isUnlimited ? '' : ` limit-uptime=${limitUptime}`;
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
-        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} server=all comment="${batchId}"\n`;
+        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes}${uptimeParam} server=all comment="${batchId}"\n`;
       });
       return script;
     }
@@ -763,9 +766,12 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         const password = sanitizeRouterOSValue(c.password !== undefined && c.password !== '' ? c.password : c.code, 40);
         const cardProf = resolveRouterOSProfile(c.profileName?.split(' ')[0] || cleanProf, 'default');
         const limitBytes = formatByteLimit(c.byteDisplay) || '0';
-        const limitUptime = formatUptimeLimit(c.uptimeDisplay) || '0';
+        const rawUptime = c.uptimeDisplay || '';
+        const limitUptime = formatUptimeLimit(rawUptime);
+        const isUnlimited = !limitUptime || limitUptime === '0' || limitUptime === '0s' || /غير\s*محد[ود]/i.test(rawUptime) || /مفتوح/i.test(rawUptime);
+        const uptimeParam = isUnlimited ? '' : ` limit-uptime=${limitUptime}`;
         const batchId = sanitizeRouterOSComment(c.batchNumber ? `NetFlow-${c.batchNumber}` : `NetFlow-${cleanProf}`);
-        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes} limit-uptime=${limitUptime} comment="${batchId}"\n`;
+        script += `/ip hotspot user add name="${username}" password="${password}" profile="${cardProf}" limit-bytes-total=${limitBytes}${uptimeParam} comment="${batchId}"\n`;
       });
       return script;
     }

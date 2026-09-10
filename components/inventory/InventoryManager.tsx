@@ -7,6 +7,7 @@ import { generateCardsPdf } from '@/lib/pdf-generator';
 import { generateRouterOSTerminalScript, chunkCards, reconcileCardsWithRouter } from '@/lib/mikrotik-helpers';
 import { DEFAULT_TEMPLATES } from '@/lib/templates';
 import { copyTextToClipboard, downloadTextFile } from '@/lib/utils';
+import { appStore, updateBatchQuantityAndCards } from '@/lib/store';
 import {
   Layers,
   Search,
@@ -38,7 +39,11 @@ import {
   ArrowRight,
   ExternalLink,
   SplitSquareVertical,
-  Check
+  Check,
+  Info,
+  Settings2,
+  Sparkles,
+  CheckCheck
 } from 'lucide-react';
 
 interface InventoryManagerProps {
@@ -82,7 +87,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     batch: CardBatch;
     cards: Card[];
   } | null>(null);
-  const [reconcileFilterMode, setReconcileFilterMode] = useState<'batch' | 'in_router_script' | 'profile' | 'all'>('batch');
+  const [reconcileFilterMode, setReconcileFilterMode] = useState<'batch' | 'count' | 'in_router_script' | 'profile' | 'all'>('batch');
   const [reconcileInput, setReconcileInput] = useState<string>('');
   const [isReconciling, setIsReconciling] = useState<boolean>(false);
   const [reconcileResult, setReconcileResult] = useState<{
@@ -91,6 +96,9 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     totalChecked: number;
   } | null>(null);
   const [copiedMissingScript, setCopiedMissingScript] = useState<boolean>(false);
+  const [isSyncingBatchQuantity, setIsSyncingBatchQuantity] = useState<boolean>(false);
+  const [customBatchCountInput, setCustomBatchCountInput] = useState<string>('');
+  const [showCustomCountBox, setShowCustomCountBox] = useState<boolean>(false);
 
   const [toastNotification, setToastNotification] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
@@ -404,6 +412,117 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       setTimeout(() => setToastNotification(null), 4000);
     } finally {
       setIsReconciling(false);
+    }
+  };
+
+  // Adopt found router cards as the true batch total or manually adjust batch count
+  const handleAdoptFoundCardsAsBatchTotal = async (customCount?: number) => {
+    if (!reconcileModalData || !reconcileResult) return;
+    const batch = reconcileModalData.batch;
+    const batchId = batch.id;
+    const tenantId = batch.tenantId || tenant.id || 'tenant_main_01';
+
+    setIsSyncingBatchQuantity(true);
+    try {
+      const matchingCodesSet = new Set(reconcileResult.foundCodes.map(c => String(c).toLowerCase().trim()));
+      
+      // Determine cards to keep:
+      let cardsToKeep = reconcileModalData.cards.filter(c => {
+        const code = String(c.code || c.username || '').toLowerCase().trim();
+        return matchingCodesSet.has(code);
+      });
+
+      if (customCount && customCount > 0) {
+        if (cardsToKeep.length < customCount) {
+          const remaining = reconcileModalData.cards.filter(c => !cardsToKeep.some(k => k.id === c.id));
+          cardsToKeep = [...cardsToKeep, ...remaining.slice(0, customCount - cardsToKeep.length)];
+        } else if (cardsToKeep.length > customCount) {
+          cardsToKeep = cardsToKeep.slice(0, customCount);
+        }
+      }
+
+      const newQuantity = cardsToKeep.length;
+      if (newQuantity === 0) {
+        setToastNotification({
+          message: 'لم يتم العثور على أي كروت صالحة للاعتماد.',
+          type: 'warning'
+        });
+        setTimeout(() => setToastNotification(null), 4000);
+        return;
+      }
+
+      const keptCardIds = new Set(cardsToKeep.map(c => c.id));
+      const cardIdsToDelete = reconcileModalData.cards
+        .filter(c => !keptCardIds.has(c.id))
+        .map(c => c.id);
+
+      // 1. Update Firestore
+      await updateBatchQuantityAndCards(tenantId, batchId, newQuantity, cardsToKeep, cardIdsToDelete);
+
+      // 2. Update local appStore
+      appStore.update(prev => {
+        const updatedBatches = prev.batches.map(b => {
+          if (b.id === batchId) {
+            return {
+              ...b,
+              quantity: newQuantity,
+              totalCards: newQuantity,
+              inStockCount: cardsToKeep.filter(c => c.status === 'in_stock').length,
+              totalRetailValue: newQuantity * (b.unitPrice || 0),
+              totalWholesaleValue: newQuantity * (b.wholesalePrice || 0),
+              cards: cardsToKeep as any[]
+            };
+          }
+          return b;
+        });
+
+        const updatedCards = prev.cards.filter(c => !cardIdsToDelete.includes(c.id));
+
+        return {
+          ...prev,
+          batches: updatedBatches,
+          cards: updatedCards
+        };
+      });
+
+      // 3. Update active modal view
+      const updatedBatchObj: CardBatch = {
+        ...batch,
+        quantity: newQuantity,
+        totalCards: newQuantity,
+        inStockCount: cardsToKeep.filter(c => c.status === 'in_stock').length,
+        totalRetailValue: newQuantity * (batch.unitPrice || 0),
+        totalWholesaleValue: newQuantity * (batch.wholesalePrice || 0)
+      };
+
+      setReconcileModalData({
+        batch: updatedBatchObj,
+        cards: cardsToKeep
+      });
+
+      setReconcileResult({
+        totalChecked: newQuantity,
+        foundCodes: cardsToKeep.map(c => String(c.code || c.username || '')),
+        missingCards: []
+      });
+
+      setShowCustomCountBox(false);
+      setCustomBatchCountInput('');
+
+      setToastNotification({
+        message: `تم اعتماد العدد الفعلي (${newQuantity} كرت) وتحديث سجل الدفعة في المخزن بنجاح! أصبحت الدفعة الآن مطابقة 100%.`,
+        type: 'success'
+      });
+      setTimeout(() => setToastNotification(null), 5000);
+    } catch (err: any) {
+      console.error('Error updating batch quantity:', err);
+      setToastNotification({
+        message: 'حدث خطأ أثناء تحديث كمية الدفعة.',
+        type: 'error'
+      });
+      setTimeout(() => setToastNotification(null), 4000);
+    } finally {
+      setIsSyncingBatchQuantity(false);
     }
   };
 
@@ -1079,22 +1198,40 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
         const batchNum = reconcileModalData.batch.batchNumber || reconcileModalData.batch.id || '';
         const cleanBatchNum = batchNum.replace(/^B-?/i, '').trim();
         const profileName = reconcileModalData.batch.profileName || 'default';
+        const totalCardsInBatch = reconcileModalData.cards.length;
 
-        // 1. Specific command by batch comment (excludes all other router users):
-        const batchSpecificCmd = `/ip hotspot user print terse where comment~"${cleanBatchNum || batchNum}"`;
+        // Extract all unique batch numbers and identifiers present inside the cards array itself
+        const cardBatchNums = Array.from(
+          new Set(
+            reconcileModalData.cards
+              .map(c => c.batchNumber ? c.batchNumber.replace(/^B-?/i, '').trim() : '')
+              .filter(Boolean)
+          )
+        );
+        if (cleanBatchNum && !cardBatchNums.includes(cleanBatchNum)) {
+          cardBatchNums.push(cleanBatchNum);
+        }
+        const commentRegex = cardBatchNums.length > 1 ? `(${cardBatchNums.join('|')})` : (cardBatchNums[0] || cleanBatchNum);
 
-        // 2. Specific command by profile:
+        // 1. Comprehensive profile-based command (finds all cards of this profile regardless of comment):
         const profileSpecificCmd = `/ip hotspot user print terse where profile="${profileName}"`;
 
-        // 3. All router users command:
+        // 2. All router users command (safest, finds every card of this batch regardless of comment or profile):
         const allUsersCmd = `/ip hotspot user print terse`;
 
-        // 4. In-router live self-audit diagnostic script (checks batch users directly inside RouterOS):
-        const batchCodes = reconcileModalData.cards.map(c => c.code || c.username).filter(Boolean);
-        const inRouterScript = `:local tot ${batchCodes.length}; :local miss 0; :foreach u in={${batchCodes.map(c => `"${c}"`).join(',')}} do={ :if ([:len [/ip hotspot user find name=$u]] = 0) do={ :set miss ($miss + 1); :put ("MISSING: " . $u) } }; :if ($miss = 0) do={ :put ("SUCCESS: All " . $tot . " cards exist in MikroTik!") } else={ :put ("ALERT: " . $miss . " cards are MISSING!") };`;
+        // 3. Specific command by batch comment (only if cards have this exact batch comment):
+        const batchSpecificCmd = `/ip hotspot user print terse where comment~"${commentRegex}"`;
 
-        let activeCommandToRun = batchSpecificCmd;
-        if (reconcileFilterMode === 'profile') activeCommandToRun = profileSpecificCmd;
+        // 4. Instant Count Command in RouterOS:
+        const batchCountCmd = `:put ("Total Hotspot Users: " . [:len [/ip hotspot user find]]) ; :put ("Users with Comment ${commentRegex}: " . [:len [/ip hotspot user find where comment~"${commentRegex}"]])`;
+
+        // 5. In-router live self-audit diagnostic script (checks batch card names directly inside RouterOS):
+        const batchCodes = reconcileModalData.cards.map(c => c.code || c.username).filter(Boolean);
+        const inRouterScript = `# فحص دقيق لكروت الدفعة (${totalCardsInBatch} كرت) داخل المايكروتك مباشرة بالاسم:\n:local tot ${batchCodes.length}; :local fnd 0; :local miss 0; :local clist {${batchCodes.map(c => `"${c}"`).join(';')}};\n:foreach u in=$clist do={ :if ([:len [/ip hotspot user find name=$u]] > 0) do={ :set fnd ($fnd + 1) } else={ :set miss ($miss + 1); :put ("MISSING: " . $u) } };\n:put ("==========================================");\n:put ("نتيجة الفحص: موجود=" . $fnd . " | مفقود=" . $miss . " من إجمالي " . $tot);`;
+
+        let activeCommandToRun = profileSpecificCmd;
+        if (reconcileFilterMode === 'batch') activeCommandToRun = batchSpecificCmd;
+        else if (reconcileFilterMode === 'count') activeCommandToRun = batchCountCmd;
         else if (reconcileFilterMode === 'in_router_script') activeCommandToRun = inRouterScript;
         else if (reconcileFilterMode === 'all') activeCommandToRun = allUsersCmd;
 
@@ -1111,9 +1248,12 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       أداة فحص ومطابقة كروت الدفعة:
                       <span className="font-mono text-sky-400 font-bold">{batchNum}</span>
+                      <span className="text-xs bg-slate-800 px-2 py-0.5 rounded-full text-slate-300 font-mono">
+                        {totalCardsInBatch} كرت
+                      </span>
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      مطابقة دقيقة ومخصصة لكروت الدفعة فقط لعزل أي نقص واستخراج سكربت الكروت المفقودة.
+                      تطابق كروت هذه الدفعة بدقة مع المايكروتك لاستخراج الكروت المفقودة وإعادة توليدها بضغطة زر.
                     </p>
                   </div>
                 </div>
@@ -1127,49 +1267,37 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
               {/* Filtering Mode Tabs */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  اختر طريقة استعلام المايكروتك المرغوبة:
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    اختر أمر استعلام الراوتر المناسب لك:
+                  </label>
+                  <span className="text-[11px] text-amber-400 font-medium">
+                    {reconcileFilterMode === 'batch' && '⚠️ ملاحظة: فلترة الكومنت تتجاهل الكروت إذا كان لها تعليق مختلف بالمايكروتك'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
-                    onClick={() => setReconcileFilterMode('batch')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
-                      reconcileFilterMode === 'batch'
+                    onClick={() => setReconcileFilterMode('profile')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
+                      reconcileFilterMode === 'profile'
                         ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
                         : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-bold">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>فلترة برقم الدفعة</span>
+                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>حسب البروفايل (موصى به)</span>
                     </div>
                     <span className="text-[10px] text-slate-400 font-normal">
-                      يجلب كروت {batchNum} فقط ويستبعد البقية
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => setReconcileFilterMode('in_router_script')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
-                      reconcileFilterMode === 'in_router_script'
-                        ? 'bg-amber-600/20 text-amber-300 border-amber-500 shadow-md ring-1 ring-amber-500/30'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold">
-                      <Terminal className="w-3.5 h-3.5 text-amber-400" />
-                      <span>فحص فوري داخل الراوتر</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      المايكروتك يفحص الدفعة ويطبع النتيجة
+                      يجلب كروت بروفايل {profileName} مهما كان التعليق
                     </span>
                   </button>
 
                   <button
                     onClick={() => setReconcileFilterMode('all')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right col-span-2 sm:col-span-1 ${
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
                       reconcileFilterMode === 'all'
-                        ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
+                        ? 'bg-sky-600/20 text-sky-300 border-sky-500 shadow-md ring-1 ring-sky-500/30'
                         : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                     }`}
                   >
@@ -1178,7 +1306,41 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                       <span>سرد كافة المستخدمين</span>
                     </div>
                     <span className="text-[10px] text-slate-400 font-normal">
-                      المنصة تعزل وتفحص {batchNum} فقط
+                      الشامل: يجلب كل الكروت والمنصة تعزل الدفعة
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setReconcileFilterMode('batch')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
+                      reconcileFilterMode === 'batch'
+                        ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500 shadow-md ring-1 ring-emerald-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>فلترة برقم التعليق</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      حصر البحث بـ comment~&quot;{commentRegex}&quot;
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setReconcileFilterMode('in_router_script')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex flex-col items-start gap-1 border text-right ${
+                      reconcileFilterMode === 'in_router_script'
+                        ? 'bg-amber-600/20 text-amber-300 border-amber-500 shadow-md ring-1 ring-amber-500/30'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Terminal className="w-3.5 h-3.5 text-amber-400" />
+                      <span>فحص ذاتي بالراوتر</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      المايكروتك يفحص أكواد الدفعة ويطبع المفقود
                     </span>
                   </button>
                 </div>
@@ -1308,39 +1470,151 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                         <div className="flex items-center gap-2">
                           <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
                           <h4 className="text-sm font-bold text-rose-300">
-                            تم اكتشاف {reconcileResult.missingCards.length} كرت مفقود من أصل {reconcileResult.totalChecked} كرت!
+                            تم اكتشاف {reconcileResult.missingCards.length} كرت غير موجود من أصل {reconcileResult.totalChecked} كرت!
                           </h4>
                         </div>
-                        <button
-                          onClick={async () => {
-                            const missingScript = generateRouterOSTerminalScript(
-                              reconcileResult.missingCards,
-                              reconcileModalData.batch.profileName,
-                              { activeOnly: true, safeDeduplication: true }
-                            );
-                            const ok = await copyTextToClipboard(missingScript);
-                            if (ok) {
-                              setCopiedMissingScript(true);
-                              setToastNotification({
-                                message: `تم نسخ أوامر الكروت المفقودة فقط (${reconcileResult.missingCards.length} كرت) بنجاح!`,
-                                type: 'success'
-                              });
-                              setTimeout(() => {
-                                setCopiedMissingScript(false);
-                                setToastNotification(null);
-                              }, 3500);
-                            }
-                          }}
-                          className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          {copiedMissingScript ? 'تم النسخ!' : 'نسخ سكربت الكروت المفقودة فقط'}
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={async () => {
+                              const missingScript = generateRouterOSTerminalScript(
+                                reconcileResult.missingCards,
+                                reconcileModalData.batch.profileName,
+                                { activeOnly: true, safeDeduplication: true }
+                              );
+                              const ok = await copyTextToClipboard(missingScript);
+                              if (ok) {
+                                setCopiedMissingScript(true);
+                                setToastNotification({
+                                  message: `تم نسخ أوامر الكروت المفقودة فقط (${reconcileResult.missingCards.length} كرت) بنجاح!`,
+                                  type: 'success'
+                                });
+                                setTimeout(() => {
+                                  setCopiedMissingScript(false);
+                                  setToastNotification(null);
+                                }, 3500);
+                              }
+                            }}
+                            className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            {copiedMissingScript ? 'تم النسخ!' : 'نسخ سكربت المفقود للراوتر'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Action Bar for Discrepancy Reconciliation */}
+                      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 space-y-2.5">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-emerald-400" />
+                            معالجة الفارق وتصحيح كمية الدفعة في المخزن:
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            إذا كانت الدفعة في الأصل أقل من {reconcileResult.totalChecked} كرت
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Quick Button: Adopt router count */}
+                          <button
+                            type="button"
+                            onClick={() => handleAdoptFoundCardsAsBatchTotal()}
+                            disabled={isSyncingBatchQuantity || reconcileResult.foundCodes.length === 0}
+                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition"
+                          >
+                            {isSyncingBatchQuantity ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <CheckCheck className="w-3.5 h-3.5" />
+                            )}
+                            اعتماد الكروت المطابقة بالراوتر ({reconcileResult.foundCodes.length} كرت) وحذف الزائد
+                          </button>
+
+                          {/* Toggle Custom Count Box */}
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomCountBox(prev => !prev)}
+                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1.5"
+                          >
+                            <Settings2 className="w-3.5 h-3.5 text-sky-400" />
+                            {showCustomCountBox ? 'إخفاء التعديل اليدوي' : 'تحديد رقم مخصص (مثلاً 399 أو 400)'}
+                          </button>
+                        </div>
+
+                        {/* Expandable Custom Count Input Box */}
+                        {showCustomCountBox && (
+                          <div className="bg-slate-950 p-3 rounded-lg border border-sky-500/30 space-y-2 mt-2 animate-fade-in">
+                            <div className="text-[11px] text-slate-300">
+                              أدخل العدد الحقيقي للدفعة لاعتماده في المخزن والسحابة:
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <input
+                                type="number"
+                                min={1}
+                                max={5000}
+                                value={customBatchCountInput}
+                                onChange={e => setCustomBatchCountInput(e.target.value)}
+                                placeholder="مثلاً: 399"
+                                className="w-32 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-center font-mono text-white focus:outline-none focus:border-sky-500"
+                              />
+                              {/* Presets */}
+                              <div className="flex items-center gap-1">
+                                {[399, 400, 384, 500].map(cnt => (
+                                  <button
+                                    key={cnt}
+                                    type="button"
+                                    onClick={() => setCustomBatchCountInput(String(cnt))}
+                                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded border border-slate-700"
+                                  >
+                                    {cnt}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isSyncingBatchQuantity || !customBatchCountInput || parseInt(customBatchCountInput) <= 0}
+                                onClick={() => handleAdoptFoundCardsAsBatchTotal(parseInt(customBatchCountInput))}
+                                className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition"
+                              >
+                                {isSyncingBatchQuantity ? 'جارٍ الحفظ...' : 'تطبيق وحفظ التعديل'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <p className="text-xs text-slate-300 leading-relaxed">
-                        هذه الميزة تحميك من تكرار الكروت أو إعادة الكروت المنتهية: يمكنك الآن ببساطة نسخ سكربت الكروت المفقودة فقط ولصقه في المايكروتك لإكمال النقص دون أي تأثير على بقية الكروت!
+                        • إذا كنت تريد إكمال بقية الكروت في المايكروتك، اضغط زر <strong className="text-amber-300">نسخ سكربت المفقود للراوتر</strong>.
+                        <br />
+                        • إذا كانت الدفعة في الواقع تتكون من الكروت الموجودة فقط، اضغط زر <strong className="text-emerald-300">اعتماد الكروت المطابقة بالراوتر</strong> لتعديل كمية الدفعة في المخزن وتصبح النتيجة مطابقة 100%.
                       </p>
+
+                      {/* Technical Tip on Winbox Terminal Scrollback Buffer & Batch Records */}
+                      <div className="bg-sky-950/40 border border-sky-500/30 rounded-lg p-3 text-[11px] text-sky-200 space-y-2">
+                        <div className="font-bold flex items-center gap-1.5 text-sky-300">
+                          <Info className="w-4 h-4 text-sky-400 shrink-0" />
+                          <span>توضيح تقني لمطابقة أعداد الكروت بدقة:</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-1 text-slate-300 leading-relaxed">
+                          <li>
+                            <strong className="text-sky-300">ملاحظة نسخ ناتج Winbox Terminal:</strong> شاشة التيرمينال في الوينبوكس لها حد أقصى للأسطر المعروضة (Scrollback buffer). إذا كانت كروتك تبدأ من السطر <span className="font-mono text-amber-300">0</span> وتصل إلى <span className="font-mono text-amber-300">398</span> ولكنك نسخت بدءاً من السطر <span className="font-mono text-amber-300">67</span>، فالأسطر من 0 إلى 66 لم تُنسخ وسيظهر هنا أنها مفقودة. اسحب شريط التمرير لأعلى التيرمينال وانسخ من البداية.
+                          </li>
+                          <li>
+                            <strong className="text-emerald-300">إجمالي كروت الدفعة بالمنصة:</strong> المنصة تقرأ كمية الدفعة ({reconcileResult.totalChecked} كرت) المسجلة في المخزن عند إنشاء الدفعة في استوديو الكروت.
+                          </li>
+                        </ul>
+                        <div className="pt-1 flex flex-wrap gap-2 text-[11px]">
+                          <span className="bg-slate-900 px-2 py-1 rounded text-slate-300 border border-slate-800">
+                            العدد المسجل بالمنصة: <strong className="text-white font-mono">{reconcileResult.totalChecked}</strong>
+                          </span>
+                          <span className="bg-slate-900 px-2 py-1 rounded text-emerald-300 border border-slate-800">
+                            الموجود بالراوتر: <strong className="font-mono">{reconcileResult.foundCodes.length}</strong>
+                          </span>
+                          <span className="bg-slate-900 px-2 py-1 rounded text-amber-300 border border-slate-800">
+                            غير الموجود بالنص المنسوخ: <strong className="font-mono">{reconcileResult.missingCards.length}</strong>
+                          </span>
+                        </div>
+                      </div>
 
                       {/* Preview of missing codes */}
                       <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 max-h-24 overflow-y-auto font-mono text-[11px] text-amber-300 flex flex-wrap gap-1.5">
