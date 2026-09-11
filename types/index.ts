@@ -349,6 +349,48 @@ export interface RouterSyncStatus {
   lastLog?: string;
 }
 
+export type DeviceType = 
+  | 'access_point' 
+  | 'sector_antenna' 
+  | 'dish_antenna' 
+  | 'nanostation' 
+  | 'switch' 
+  | 'routerboard' 
+  | 'fiber_olt_onu' 
+  | 'camera' 
+  | 'other';
+
+export type DeviceStatus = 'active' | 'offline' | 'maintenance';
+
+export interface NetworkDevice {
+  id: string;
+  tenantId: string;
+  name: string;
+  deviceNumber?: string;
+  ipAddress: string;
+  subnetMask?: string;
+  gateway?: string;
+  macAddress?: string;
+  type: DeviceType;
+  model?: string;
+  brand?: string;
+  location: string;
+  site?: string;
+  adminUsername?: string;
+  adminPassword?: string;
+  webPort?: number;
+  status: DeviceStatus;
+  notes?: string;
+  frequency?: string;
+  ssid?: string;
+  txPower?: string;
+  connectedToDeviceId?: string;
+  connectedToDeviceName?: string;
+  createdAt: string;
+  updatedAt?: string;
+  lastPingAt?: string;
+}
+
 export interface AppState {
   tenant: Tenant;
   profiles: Profile[];
@@ -358,6 +400,7 @@ export interface AppState {
   invoices: Invoice[];
   payments: PaymentTransaction[];
   team: TeamMember[];
+  devices?: NetworkDevice[];
   currentUserProfile: UserProfile | null;
   templates: CardTemplate[];
   selectedTemplateId: string;

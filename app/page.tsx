@@ -19,7 +19,9 @@ import {
   deleteTeamMemberFromFirestore,
   saveUserProfile,
   saveTemplateToFirestore,
-  deleteTemplateFromFirestore
+  deleteTemplateFromFirestore,
+  saveDevice,
+  deleteDeviceFromFirestore
 } from '@/lib/firestore-service';
 import {
   Card,
@@ -31,7 +33,8 @@ import {
   Profile,
   Tenant,
   TeamMember,
-  UserProfile
+  UserProfile,
+  NetworkDevice
 } from '@/types';
 import dynamic from 'next/dynamic';
 import { Navigation } from '@/components/layout/Navigation';
@@ -54,6 +57,9 @@ const MikroTikBridge = dynamic(() => import('@/components/mikrotik/MikroTikBridg
 });
 const SuperAdminDashboard = dynamic(() => import('@/components/admin/SuperAdminDashboard').then(m => m.SuperAdminDashboard), {
   loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل لوحة تحكم الإدارة العليا...</div>
+});
+const DeviceManager = dynamic(() => import('@/components/devices/DeviceManager').then(m => m.DeviceManager), {
+  loading: () => <div className="p-12 text-center text-slate-400 font-bold text-sm animate-pulse">جاري تحميل إدارة الأجهزة والبنية التحتية...</div>
 });
 const DistributorFieldView = dynamic(() => import('@/components/distributor/DistributorFieldView').then(m => m.DistributorFieldView));
 const NewInvoiceModal = dynamic(() => import('@/components/modals/NewInvoiceModal').then(m => m.NewInvoiceModal));
@@ -682,6 +688,45 @@ export default function Home() {
     }));
   };
 
+  const handleSaveDevice = async (device: NetworkDevice): Promise<boolean> => {
+    const tenantId = appState?.tenant.id || 'tenant_main_01';
+    updateState(prev => {
+      const existingIndex = (prev.devices || []).findIndex(d => d.id === device.id);
+      let updatedDevices: NetworkDevice[];
+      if (existingIndex >= 0) {
+        updatedDevices = [...(prev.devices || [])];
+        updatedDevices[existingIndex] = device;
+      } else {
+        updatedDevices = [device, ...(prev.devices || [])];
+      }
+      return { ...prev, devices: updatedDevices };
+    });
+
+    try {
+      const ok = await saveDevice(tenantId, device);
+      return ok;
+    } catch (err) {
+      console.error('Failed to save device in Firestore:', err);
+      return false;
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string): Promise<boolean> => {
+    const tenantId = appState?.tenant.id || 'tenant_main_01';
+    updateState(prev => ({
+      ...prev,
+      devices: (prev.devices || []).filter(d => d.id !== deviceId)
+    }));
+
+    try {
+      const ok = await deleteDeviceFromFirestore(tenantId, deviceId);
+      return ok;
+    } catch (err) {
+      console.error('Failed to delete device from Firestore:', err);
+      return false;
+    }
+  };
+
   // Derived metrics for navbar
   const totalMarketDebt = useMemo(() => {
     if (!appState) return 0;
@@ -891,6 +936,15 @@ export default function Home() {
               setSelectedAgentIdForModal(agentId);
               setIsPaymentModalOpen(true);
             }}
+          />
+        )}
+
+        {isOwner && activeTab === 'devices' && (
+          <DeviceManager
+            tenant={appState.tenant}
+            devices={appState.devices || []}
+            onSaveDevice={handleSaveDevice}
+            onDeleteDevice={handleDeleteDevice}
           />
         )}
 

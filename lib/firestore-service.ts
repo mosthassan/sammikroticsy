@@ -38,7 +38,8 @@ import {
   UserProfile,
   TeamMember,
   UserRole,
-  TenantSubscription
+  TenantSubscription,
+  NetworkDevice
 } from '@/types';
 
 // Admin / Owner bootstrap constants
@@ -1024,6 +1025,73 @@ export function subscribePayments(
       onError?.(err);
     }
   );
+}
+
+// ==========================================
+// 6.5. Network Devices & IP Management
+// ==========================================
+
+export async function fetchDevices(tenantId: string): Promise<NetworkDevice[]> {
+  try {
+    await ensureAuth();
+    const colRef = collection(db, 'tenants', tenantId, 'devices');
+    const q = query(colRef, orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    const devices: NetworkDevice[] = [];
+    snap.forEach((d) => devices.push(d.data() as NetworkDevice));
+    return devices;
+  } catch (error) {
+    console.warn('Firestore fetchDevices warning:', error);
+    return [];
+  }
+}
+
+export function subscribeDevices(
+  tenantId: string,
+  onData: (devices: NetworkDevice[]) => void,
+  onError?: (err: any) => void
+): Unsubscribe {
+  const colRef = collection(db, 'tenants', tenantId, 'devices');
+  const q = query(colRef, orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const devices: NetworkDevice[] = [];
+      snap.forEach((d) => devices.push(d.data() as NetworkDevice));
+      onData(devices);
+    },
+    (err) => {
+      console.warn('subscribeDevices listener error:', err);
+      onError?.(err);
+    }
+  );
+}
+
+export async function saveDevice(tenantId: string, device: NetworkDevice): Promise<boolean> {
+  try {
+    await ensureAuth();
+    const devRef = doc(db, 'tenants', tenantId, 'devices', device.id);
+    await setDoc(devRef, sanitizeForFirestore({
+      ...device,
+      updatedAt: new Date().toISOString()
+    }), { merge: true });
+    return true;
+  } catch (error: any) {
+    console.warn('Firestore saveDevice note:', error?.message || error);
+    return false;
+  }
+}
+
+export async function deleteDeviceFromFirestore(tenantId: string, deviceId: string): Promise<boolean> {
+  try {
+    await ensureAuth();
+    const devRef = doc(db, 'tenants', tenantId, 'devices', deviceId);
+    await deleteDoc(devRef);
+    return true;
+  } catch (error: any) {
+    console.warn('Firestore deleteDevice note:', error?.message || error);
+    return false;
+  }
 }
 
 // ==========================================

@@ -29,7 +29,8 @@ import {
   LogOut,
   Crown,
   Zap,
-  Download
+  Download,
+  Network
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 
@@ -85,6 +86,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         { id: 'hotspot', label: 'صفحات الهوتسبوت', icon: MonitorSmartphone },
         { id: 'inventory', label: 'المخزن والدفعات', icon: Layers, badge: inStockCardsCount },
         { id: 'pos', label: 'نقاط البيع والبقالات', icon: Building2 },
+        { id: 'devices', label: 'الأجهزة وعناوين الآيبي', icon: Network },
         { id: 'invoices', label: 'سجل السندات والتحصيل', icon: FileText },
         { id: 'mikrotik', label: 'جسر المايكروتك', icon: Radio },
         { id: 'settings', label: 'الإعدادات والباقات', icon: Settings }

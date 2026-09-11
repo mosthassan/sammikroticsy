@@ -12,7 +12,8 @@ import {
   RouterSyncStatus,
   UserProfile,
   TeamMember,
-  AppState
+  AppState,
+  NetworkDevice
 } from '@/types';
 
 export type { AppState };
@@ -36,6 +37,8 @@ import {
   subscribeInvoices,
   fetchPayments,
   subscribePayments,
+  fetchDevices,
+  subscribeDevices,
   fetchTeamMembers,
   subscribeTeamMembers,
   fetchUserProfile,
@@ -92,6 +95,150 @@ const INITIAL_TEAM: TeamMember[] = [
     totalPaymentsCollected: 92000,
     createdAt: '2026-02-15T09:00:00Z',
     lastActiveAt: '2026-03-07T14:15:00Z'
+  }
+];
+
+const INITIAL_DEVICES: NetworkDevice[] = [
+  {
+    id: 'dev_01',
+    tenantId: 'tenant_main_01',
+    name: 'أكسس بوينت حي السلام (بقالة الأمانة)',
+    deviceNumber: 'AP-01',
+    ipAddress: '10.0.0.21',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: '68:D7:9A:12:34:56',
+    type: 'access_point',
+    model: 'TP-Link EAP225-Outdoor',
+    brand: 'TP-Link',
+    location: 'برج حي السلام - الطابق 3',
+    site: 'حي السلام',
+    adminUsername: 'admin',
+    adminPassword: 'Password@2026',
+    webPort: 80,
+    status: 'active',
+    frequency: '2.4GHz (CH 6)',
+    ssid: 'SamTech_AlSalam_Free',
+    txPower: '24 dBm',
+    notes: 'يغطي مربع بقالة الأمانة والشارع العام، متصل مع سويتش البرج كابل Cat6 خارجي',
+    createdAt: '2026-02-01T10:00:00Z',
+    updatedAt: '2026-03-08T10:00:00Z'
+  },
+  {
+    id: 'dev_02',
+    tenantId: 'tenant_main_01',
+    name: 'أكسس بوينت جولة النصر (صيدلية الشفاء)',
+    deviceNumber: 'AP-02',
+    ipAddress: '10.0.0.22',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: '74:83:C2:55:66:77',
+    type: 'access_point',
+    model: 'UniFi AC Mesh UAP-AC-M',
+    brand: 'Ubiquiti',
+    location: 'عمود إنارة جولة النصر',
+    site: 'جولة النصر',
+    adminUsername: 'ubnt',
+    adminPassword: 'Ubnt@Wifi#2026',
+    webPort: 80,
+    status: 'active',
+    frequency: '5GHz (CH 36)',
+    ssid: 'SamTech_AlNasr_5G',
+    txPower: '20 dBm',
+    notes: 'تغطية قوية للجولة ومواقف الباصات وصيدلية الشفاء',
+    createdAt: '2026-02-05T12:00:00Z',
+    updatedAt: '2026-03-08T11:00:00Z'
+  },
+  {
+    id: 'dev_03',
+    tenantId: 'tenant_main_01',
+    name: 'سيكتور بث رئيسي شمالي (قطاع الجامعة)',
+    deviceNumber: 'SEC-01',
+    ipAddress: '10.0.0.31',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: '00:27:22:99:88:11',
+    type: 'sector_antenna',
+    model: 'Rocket M5 + Sector 120°',
+    brand: 'Ubiquiti',
+    location: 'البرج الرئيسي - السطح',
+    site: 'قطاع الجامعة',
+    adminUsername: 'ubnt',
+    adminPassword: 'Sector@Master#1',
+    webPort: 80,
+    status: 'active',
+    frequency: '5800 MHz (AirMax)',
+    txPower: '27 dBm',
+    notes: 'بث مايكرويف رئيسي لربط أكسسات حي الجامعة ومدرسة الفتح',
+    createdAt: '2026-01-20T08:00:00Z',
+    updatedAt: '2026-03-05T09:00:00Z'
+  },
+  {
+    id: 'dev_04',
+    tenantId: 'tenant_main_01',
+    name: 'محطة استقبال نانوستيشن (مدرسة الفتح)',
+    deviceNumber: 'NANO-01',
+    ipAddress: '10.0.0.41',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: '24:A4:3C:44:55:66',
+    type: 'nanostation',
+    model: 'NanoStation Loco M5',
+    brand: 'Ubiquiti',
+    location: 'مبنى مدرسة الفتح - السطح',
+    site: 'مدرسة الفتح',
+    adminUsername: 'ubnt',
+    adminPassword: 'Nano@AlFateh#22',
+    webPort: 80,
+    status: 'active',
+    frequency: '5800 MHz (Station)',
+    notes: 'مستقبل إشارة من السيكتور الرئيسي وموصل بسويتش التوزيع',
+    createdAt: '2026-02-10T14:00:00Z',
+    updatedAt: '2026-03-06T15:00:00Z'
+  },
+  {
+    id: 'dev_05',
+    tenantId: 'tenant_main_01',
+    name: 'سويتش توزيع ذكي Gigabit PoE',
+    deviceNumber: 'SW-01',
+    ipAddress: '10.0.0.11',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: 'D8:07:B6:77:88:99',
+    type: 'switch',
+    model: 'TL-SG1210P PoE+ Managed',
+    brand: 'TP-Link',
+    location: 'كابينة البرج الرئيسي - الرف الأوسط',
+    site: 'البرج الرئيسي',
+    adminUsername: 'admin',
+    adminPassword: 'Switch@PoE#Admin',
+    webPort: 80,
+    status: 'active',
+    notes: 'يغذي 6 أكسسات بالكهرباء والبيانات مع حماية ضد الصواعق',
+    createdAt: '2026-01-15T09:00:00Z',
+    updatedAt: '2026-03-07T12:00:00Z'
+  },
+  {
+    id: 'dev_06',
+    tenantId: 'tenant_main_01',
+    name: 'كاميرا مراقبة البرج والمعدات',
+    deviceNumber: 'CAM-01',
+    ipAddress: '10.0.0.151',
+    subnetMask: '255.255.255.0',
+    gateway: '10.0.0.1',
+    macAddress: 'BC:54:51:22:33:44',
+    type: 'camera',
+    model: 'Hikvision IP Dome 4MP ColorVu',
+    brand: 'Hikvision',
+    location: 'أعلى سارية البرج الرئيسي',
+    site: 'البرج الرئيسي',
+    adminUsername: 'admin',
+    adminPassword: 'Cam@Tower#2026',
+    webPort: 80,
+    status: 'active',
+    notes: 'مراقبة حية ملونة ليلاً ونهاراً للبطاريات وأجهزة الطاقة الشمسية',
+    createdAt: '2026-02-18T16:00:00Z',
+    updatedAt: '2026-03-08T18:00:00Z'
   }
 ];
 
@@ -494,6 +641,7 @@ export function createInitialData(): AppState {
     invoices,
     payments,
     team: INITIAL_TEAM,
+    devices: INITIAL_DEVICES,
     currentUserProfile: null,
     templates: DEFAULT_TEMPLATES,
     selectedTemplateId: 'tpl_modern_dark',
@@ -536,6 +684,9 @@ export function loadAppState(): AppState {
           }
         }
       }
+    }
+    if (!parsed.devices || !Array.isArray(parsed.devices) || parsed.devices.length === 0) {
+      parsed.devices = INITIAL_DEVICES;
     }
     return parsed;
   } catch {
@@ -659,6 +810,7 @@ export const appStore = {
         cloudAgents,
         cloudInvoices,
         cloudPayments,
+        cloudDevices,
         cloudTeam
       ] = await Promise.all([
         fetchTenant(tenantId),
@@ -669,6 +821,7 @@ export const appStore = {
         fetchAgents(tenantId),
         fetchInvoices(tenantId),
         fetchPayments(tenantId),
+        fetchDevices(tenantId),
         fetchTeamMembers(tenantId)
       ]);
 
@@ -684,6 +837,7 @@ export const appStore = {
         agents: (cloudAgents && cloudAgents.length > 0) ? cloudAgents : (cloudAgents !== null ? cloudAgents : prev.agents),
         invoices: (cloudInvoices && cloudInvoices.length > 0) ? cloudInvoices : (cloudInvoices !== null ? cloudInvoices : prev.invoices),
         payments: (cloudPayments && cloudPayments.length > 0) ? cloudPayments : (cloudPayments !== null ? cloudPayments : prev.payments),
+        devices: (cloudDevices && cloudDevices.length > 0) ? cloudDevices : (prev.devices || INITIAL_DEVICES),
         team: (cloudTeam && cloudTeam.length > 0) ? cloudTeam : (cloudTeam !== null ? cloudTeam : prev.team),
         isCloudConnected: true,
         isSyncingWithCloud: false
@@ -741,6 +895,12 @@ export const appStore = {
         }
       });
 
+      const unsubDevices = subscribeDevices(tenantId, (devices) => {
+        if (devices && devices.length > 0) {
+          appStore.update(prev => ({ ...prev, devices }));
+        }
+      });
+
       const unsubTeam = subscribeTeamMembers(tenantId, (team) => {
         if (team) {
           appStore.update(prev => ({ ...prev, team }));
@@ -756,6 +916,7 @@ export const appStore = {
         unsubAgents,
         unsubInvoices,
         unsubPayments,
+        unsubDevices,
         unsubTeam
       ];
 
