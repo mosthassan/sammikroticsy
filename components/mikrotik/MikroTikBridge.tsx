@@ -82,8 +82,8 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
   const [routerIp, setRouterIp] = useState<string>(tenant.settings.routerIp || '10.0.0.1');
   const [loginDomain, setLoginDomain] = useState<string>(tenant.settings.loginDomain || 'wifi.net');
   const [apiHost, setApiHost] = useState<string>(tenant.settings.apiHost || '192.168.88.1');
-  const [apiPort, setApiPort] = useState<number>(tenant.settings.apiPort || 8728);
-  const [apiUser, setApiUser] = useState<string>(tenant.settings.apiUser || 'admin_netflow');
+  const [apiPort, setApiPort] = useState<number>(tenant.settings.apiPort || 8081);
+  const [apiUser, setApiUser] = useState<string>(tenant.settings.apiUser || 'mosthassan');
   const [apiPassword, setApiPassword] = useState<string>(tenant.settings.apiPassword || '');
   const [hotspotServerName, setHotspotServerName] = useState<string>(tenant.settings.hotspotServerName || 'hotspot1');
   const [urlPattern, setUrlPattern] = useState<string>(tenant.settings.autoLoginUrlPattern || 'http://{domain}/login?username={code}&password={password}');
@@ -961,13 +961,19 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
               </div>
 
               <div>
-                <label className="block text-slate-300 font-bold mb-1">منفذ الـ API (Port)</label>
+                <label className="block text-slate-300 font-bold mb-1">
+                  منفذ الـ REST API (الافتراضي: 8081)
+                </label>
                 <input
                   type="number"
                   value={apiPort}
-                  onChange={e => setApiPort(parseInt(e.target.value) || 8728)}
+                  onChange={e => setApiPort(parseInt(e.target.value) || 8081)}
+                  placeholder="8081"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono focus:outline-none"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  لتفادي تعارض منفذ الهوتسبوت 80
+                </span>
               </div>
 
               <div>
@@ -984,12 +990,14 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-300 font-bold mb-1">اسم مستخدم الـ API</label>
+                <label className="block text-slate-300 font-bold mb-1">
+                  اسم مستخدم الـ API (المعتمد: mosthassan)
+                </label>
                 <input
                   type="text"
                   value={apiUser}
                   onChange={e => setApiUser(e.target.value)}
-                  placeholder="admin_netflow"
+                  placeholder="mosthassan"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono focus:outline-none"
                 />
               </div>

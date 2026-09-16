@@ -1,5 +1,3 @@
-import http from 'http';
-import https from 'https';
 import { CardInjectionItem, InjectionErrorDetail, MikroTikInjectionAudit } from '@/types';
 
 export interface RouterConfig {
@@ -34,77 +32,54 @@ export function isPrivateIp(ip: string): boolean {
 }
 
 /**
- * Executes an HTTP/HTTPS REST request to MikroTik RouterOS v7
+ * Executes a REST request to MikroTik RouterOS v7 using standard built-in fetch
+ * Strictly targeting port 8081: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
  */
-function sendMikroTikHttpRequest(
+async function sendMikroTikFetchRequest(
   method: 'PUT' | 'POST' | 'GET',
-  path: string,
+  url: string,
   payload: Record<string, any> | null,
   config: RouterConfig
 ): Promise<{ statusCode: number; data: string }> {
-  return new Promise((resolve, reject) => {
-    const isHttps = config.useHttps ?? (config.port === 443 || !config.port);
-    const client = isHttps ? https : http;
-    const defaultPort = isHttps ? 443 : 80;
-    const port = config.port || defaultPort;
-    const timeout = config.timeoutMs || 6000;
+  const username = config.username?.trim() || process.env.MIKROTIK_USER?.trim() || 'mosthassan';
+  const password = config.password !== undefined && config.password !== ''
+    ? config.password
+    : (process.env.MIKROTIK_PASS ?? '');
+  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+  const timeoutMs = config.timeoutMs || 5000;
 
-    const authHeader = 'Basic ' + Buffer.from(`${config.username}:${config.password || ''}`).toString('base64');
-    const postData = payload ? JSON.stringify(payload) : '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const options: https.RequestOptions = {
-      hostname: config.host,
-      port,
-      path,
+  try {
+    const res = await fetch(url, {
       method,
-      timeout,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': authHeader,
-        ...(postData ? { 'Content-Length': Buffer.byteLength(postData) } : {})
+        'Authorization': authHeader
       },
-      // RouterOS uses self-signed certificates by default for www-ssl
-      rejectUnauthorized: false
+      body: payload ? JSON.stringify(payload) : undefined,
+      signal: controller.signal
+    });
+
+    const data = await res.text();
+    return {
+      statusCode: res.status,
+      data
     };
-
-    const req = client.request(options, (res) => {
-      let responseBody = '';
-      res.setEncoding('utf8');
-
-      res.on('data', (chunk) => {
-        responseBody += chunk;
-      });
-
-      res.on('end', () => {
-        resolve({
-          statusCode: res.statusCode || 500,
-          data: responseBody
-        });
-      });
-    });
-
-    req.on('timeout', () => {
-      req.destroy(new Error(`Connection to MikroTik at ${config.host}:${port} timed out after ${timeout}ms`));
-    });
-
-    req.on('error', (err) => {
-      reject(err);
-    });
-
-    if (postData) {
-      req.write(postData);
-    }
-    req.end();
-  });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
  * Injects a single card into MikroTik RouterOS v7 REST API
  * Strictly enforces:
+ * - Target: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+ * - Dedicated port 8081 to avoid Hotspot port 80 conflict
  * - profile: "default"
  * - clean payload with quota-only limit-bytes-total
- * - no limit-uptime if volume only
  */
 export async function injectSingleCard(
   card: CardInjectionItem,
@@ -142,13 +117,20 @@ export async function injectSingleCard(
     };
   }
 
-  try {
-    // Preferred RouterOS v7 method: PUT /rest/ip/hotspot/user
-    let response = await sendMikroTikHttpRequest('PUT', '/rest/ip/hotspot/user', payload, config);
+  // Connection & Port Target resolution:
+  // Strictly port 8081: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+  const envHost = process.env.MIKROTIK_HOST?.trim();
+  const host = config.host?.trim() || envHost || '192.168.88.1';
+  const port = 8081;
+  const targetEndpoint = `http://${host}:${port}/rest/ip/hotspot/user`;
 
-    // If 404 or method not allowed, try POST /rest/ip/hotspot/user/add
+  try {
+    // Preferred RouterOS v7 method: PUT http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+    let response = await sendMikroTikFetchRequest('PUT', targetEndpoint, payload, config);
+
+    // If 404 or method not allowed on some RouterOS minor builds, fallback to POST
     if (response.statusCode === 404 || response.statusCode === 405) {
-      response = await sendMikroTikHttpRequest('POST', '/rest/ip/hotspot/user/add', payload, config);
+      response = await sendMikroTikFetchRequest('POST', targetEndpoint, payload, config);
     }
 
     const { statusCode, data } = response;
@@ -194,17 +176,14 @@ export async function injectSingleCard(
     };
 
   } catch (err: any) {
-    const isTimeout = err?.message?.includes('timed out') || err?.code === 'ETIMEDOUT';
-    const isConnRefused = err?.code === 'ECONNREFUSED';
-    const isUnreachable = err?.code === 'EHOSTUNREACH' || err?.code === 'ENETUNREACH';
+    const isTimeout = err?.name === 'AbortError' || err?.message?.includes('aborted') || err?.message?.includes('timed out');
+    const isConnRefused = err?.code === 'ECONNREFUSED' || err?.message?.includes('ECONNREFUSED');
 
     let errorDetail = err?.message || 'خطأ غير معروف في الاتصال';
     if (isTimeout) {
-      errorDetail = `انتهت مهلة الاتصال بالراوتر (${config.host}:${config.port || 443})`;
+      errorDetail = `انتهت مهلة الاتصال بالراوتر (${targetEndpoint})`;
     } else if (isConnRefused) {
-      errorDetail = `تم رفض الاتصال من الراوتر (${config.host}:${config.port || 443}) - تأكد من تفعيل خدمة www/www-ssl`;
-    } else if (isUnreachable) {
-      errorDetail = `تعذر الوصول لعنوان الراوتر (${config.host})`;
+      errorDetail = `تم رفض الاتصال من الراوتر (${targetEndpoint}) - تأكد من تشغيل خدمة www على المنفذ 8081 في /ip service`;
     }
 
     return {
@@ -281,6 +260,9 @@ export async function executeAutoInjectionPipeline(
     finalStatus = successfullyAdded > 0 ? 'partial' : 'failed';
   }
 
+  const effectiveHost = routerConfig.host?.trim() || process.env.MIKROTIK_HOST?.trim() || '192.168.88.1';
+  const targetUrl = `http://${effectiveHost}:8081/rest/ip/hotspot/user`;
+
   return {
     batch_id: batchComment,
     total_cards: totalCards,
@@ -291,6 +273,7 @@ export async function executeAutoInjectionPipeline(
     status: finalStatus,
     connection_type: routerConfig.mockSimulation ? 'mock_simulation' : (isPrivate ? 'private_lan' : 'public_rest_v7'),
     router_ip: routerConfig.host,
+    target_url: targetUrl,
     timestamp: new Date().toISOString()
   };
 }

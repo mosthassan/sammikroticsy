@@ -727,10 +727,10 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       try {
         const routerConfig = {
           host: tenant.settings?.apiHost || tenant.settings?.routerIp || '10.0.0.1',
-          port: tenant.settings?.apiPort || 443,
-          username: tenant.settings?.apiUser || 'admin',
+          port: tenant.settings?.apiPort || 8081,
+          username: tenant.settings?.apiUser || 'mosthassan',
           password: tenant.settings?.apiPassword || '',
-          useHttps: true,
+          useHttps: tenant.settings?.apiPort === 443,
           timeoutMs: 4000,
           mockSimulation: enableSimulationMode
         };
@@ -813,10 +813,10 @@ export const CardStudio: React.FC<CardStudioProps> = ({
 
       const routerConfig = {
         host: tenant.settings?.apiHost || tenant.settings?.routerIp || '10.0.0.1',
-        port: tenant.settings?.apiPort || 443,
-        username: tenant.settings?.apiUser || 'admin',
+        port: tenant.settings?.apiPort || 8081,
+        username: tenant.settings?.apiUser || 'mosthassan',
         password: tenant.settings?.apiPassword || '',
-        useHttps: true,
+        useHttps: tenant.settings?.apiPort === 443,
         timeoutMs: 4000,
         mockSimulation: forceSim
       };

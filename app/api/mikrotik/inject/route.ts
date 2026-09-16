@@ -36,13 +36,32 @@ export async function POST(req: NextRequest) {
       comment: effectiveBatchId
     })).filter(c => c.name.length > 0);
 
+    // Environment variables fallback for MikroTik REST API
+    // Connection & Port Target:
+    // process.env.MIKROTIK_HOST (Router domain or IP)
+    // process.env.MIKROTIK_USER (Authorized user: mosthassan)
+    // process.env.MIKROTIK_PASS (API encrypted password)
+    // Dedicated port: 8081 (to avoid conflict with internal hotspot port 80)
+    // Target: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+    const envHost = process.env.MIKROTIK_HOST?.trim();
+    const envUser = process.env.MIKROTIK_USER?.trim() || 'mosthassan';
+    const envPass = process.env.MIKROTIK_PASS || '';
+    const envPort = 8081;
+
+    // Resolve effective host and credentials with robust fallbacks
+    const effectiveHost = routerConfig?.host?.trim() || routerConfig?.routerIp?.trim() || envHost || '192.168.88.1';
+    const effectiveUser = routerConfig?.username?.trim() || routerConfig?.apiUser?.trim() || envUser;
+    const effectivePass = (routerConfig?.password !== undefined && routerConfig.password !== '') 
+      ? routerConfig.password 
+      : envPass;
+
     // Prepare router configuration with safe defaults
     const effectiveConfig: RouterConfig = {
-      host: routerConfig?.host || routerConfig?.routerIp || '10.0.0.1',
-      port: routerConfig?.port ? Number(routerConfig.port) : 443,
-      username: routerConfig?.username || routerConfig?.apiUser || 'admin',
-      password: routerConfig?.password || routerConfig?.apiPassword || '',
-      useHttps: routerConfig?.useHttps ?? true,
+      host: effectiveHost,
+      port: envPort,
+      username: effectiveUser,
+      password: effectivePass,
+      useHttps: false, // Strictly HTTP on dedicated port 8081
       timeoutMs: routerConfig?.timeoutMs ? Number(routerConfig.timeoutMs) : 5000,
       mockSimulation: Boolean(routerConfig?.mockSimulation)
     };
@@ -71,4 +90,28 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Diagnostic GET endpoint to verify connection settings and target route
+ * http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+ */
+export async function GET() {
+  const host = process.env.MIKROTIK_HOST || '192.168.88.1';
+  const port = 8081;
+  const user = process.env.MIKROTIK_USER || 'mosthassan';
+  const hasPass = Boolean(process.env.MIKROTIK_PASS);
+  const targetUrl = `http://${host}:${port}/rest/ip/hotspot/user`;
+
+  return NextResponse.json({
+    status: 'ready',
+    target_endpoint: targetUrl,
+    method: 'PUT /rest/ip/hotspot/user',
+    dedicated_port: port,
+    default_user: user,
+    host_configured: Boolean(process.env.MIKROTIK_HOST),
+    pass_configured: hasPass,
+    router_host: host,
+    info: 'جميع طلبات الـ REST API تتم حصراً عبر المنفذ المخصص (8081) لتفادي تعارض منفذ الهوتسبوت الداخلي 80'
+  });
 }

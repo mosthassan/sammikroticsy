@@ -559,6 +559,7 @@ export interface MikroTikInjectionAudit {
   status: 'completed' | 'partial' | 'failed';
   connection_type?: string;
   router_ip?: string;
+  target_url?: string;
   timestamp?: string;
 }
 

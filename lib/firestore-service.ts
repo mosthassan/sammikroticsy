@@ -1266,8 +1266,8 @@ export const DEMO_SUPER_ADMIN_TENANTS: Tenant[] = [
       loginDomain: 'wifi.samtech.net',
       autoLoginUrlPattern: 'http://{domain}/login?username={code}&password={password}',
       apiHost: '192.168.88.1',
-      apiPort: 8728,
-      apiUser: 'admin_samtech',
+      apiPort: 8081,
+      apiUser: 'mosthassan',
       hotspotServerName: 'hotspot1',
       syncToken: 'sam_sec_89df24a67e12c4'
     },
@@ -1301,7 +1301,8 @@ export const DEMO_SUPER_ADMIN_TENANTS: Tenant[] = [
       loginDomain: 'aden.net',
       autoLoginUrlPattern: 'http://{domain}/login?username={code}&password={password}',
       apiHost: '192.168.1.1',
-      apiPort: 8728,
+      apiPort: 8081,
+      apiUser: 'mosthassan',
       syncToken: 'aden_sec_token_993'
     },
     createdAt: '2026-02-01T12:00:00Z',

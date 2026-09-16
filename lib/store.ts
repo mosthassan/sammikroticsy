@@ -255,8 +255,8 @@ const INITIAL_TENANT: Tenant = {
     loginDomain: 'wifi.samtech.net',
     autoLoginUrlPattern: 'http://{domain}/login?username={code}&password={password}',
     apiHost: '192.168.88.1',
-    apiPort: 8728,
-    apiUser: 'admin_samtech',
+    apiPort: 8081,
+    apiUser: 'mosthassan',
     apiPassword: '',
     hotspotServerName: 'hotspot1',
     syncToken: 'sam_sec_89df24a67e12c4'
