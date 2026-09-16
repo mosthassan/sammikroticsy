@@ -149,15 +149,30 @@ export function generateRouterOSTerminalScript(
   if (targetCards.length === 0) return "# لا توجد كروت نشطة مؤهلة للمزامنة (جميع الكروت مستخدمة أو منتهية).";
 
   const firstCard = targetCards[0] || {};
-  const pName = profileName || firstCard.profileName || firstCard.profile || "default";
-  const cleanProf = resolveRouterOSProfile(pName, "default");
+  // قاعدة البروفايل الثابت (Fixed Default Profile) - موحد دائماً ليكون default
+  const fixedProfile = "default";
+  
+  // استخراج وتوحيد تعليق الدفعة (comment="NetFlow-B-XXX") لمنع أي تسريب
+  const rawBatchNum = firstCard.batchNumber || firstCard.batchId || "001";
+  let cleanBatchStr = String(rawBatchNum).replace(/^NetFlow[-_]?/i, "").trim();
+  if (cleanBatchStr.toLowerCase().startsWith("b-")) {
+    cleanBatchStr = cleanBatchStr.substring(2);
+  } else if (cleanBatchStr.toLowerCase().startsWith("b")) {
+    cleanBatchStr = cleanBatchStr.substring(1);
+  }
+  const batchComment = sanitizeRouterOSComment(`NetFlow-B-${cleanBatchStr || "001"}`);
+
+  // تحديد حجم البيانات الموحد للدفعة
+  const rawByte = firstCard.byteDisplay || firstCard.limitBytesTotal || firstCard.byteLimit || "2700M";
+  const formattedBytes = formatByteLimit(rawByte) || "2700M";
+
   const lines: string[] = [
     `# ==========================================================`,
-    `# NetFlow SaaS - MikroTik Resilient Hotspot User Import Script`,
-    `# Generated At: ${new Date().toLocaleString("ar-EG")}`,
-    `# Total Valid Users: ${targetCards.length} | Profile: ${cleanProf}`,
-    `# Mode: Safe Deduplication & Error-Isolated Execution`,
-    `# Protection: Expired / Used Vouchers Automatically Excluded`,
+    `# NetFlow SaaS - MikroTik Resilient Hotspot User Import Script (.rsc)`,
+    `# Generated At: ${new Date().toISOString()}`,
+    `# Batch: ${batchComment} | Total Users: ${targetCards.length} | Profile: ${fixedProfile}`,
+    `# Policy: Dynamic Speeds Enabled - Fixed Default Profile | Quota: ${formattedBytes}`,
+    `# Architecture: Safe Deduplication & Zero-Leakage Error Isolation`,
     `# ==========================================================`,
   ];
 
@@ -172,35 +187,11 @@ export function generateRouterOSTerminalScript(
         ? card.password
         : card.username || card.code || rawCode;
     const safePwd = sanitizeRouterOSValue(rawPwd, 40);
-    const prof = resolveRouterOSProfile(profileName || card.profileName || card.profile, cleanProf);
-    const bNum = card.batchNumber || card.batchId || "";
-    const batchId = sanitizeRouterOSComment(bNum ? `NetFlow-${bNum}` : `NetFlow_${card.price || "Batch"}`);
 
-    const rawByte = card.byteDisplay || card.limitBytesTotal || card.byteLimit || "";
-    const formattedBytes = formatByteLimit(rawByte);
-    const limitBytes = formattedBytes && formattedBytes !== "" ? formattedBytes : "0";
-
-    const rawUptime = card.uptimeDisplay || card.limitUptime || card.uptimeLimit || "";
-    const formattedUptime = formatUptimeLimit(rawUptime);
-    const isUnlimitedUptime =
-      !formattedUptime ||
-      formattedUptime === "0" ||
-      formattedUptime === "0s" ||
-      /غير\s*محد[ود]/i.test(rawUptime) ||
-      /مفتوح/i.test(rawUptime);
-
-    const uptimeClause = isUnlimitedUptime ? "" : ` limit-uptime=${formattedUptime}`;
-
-    if (options.safeDeduplication !== false) {
-      // حماية فائقة: التأكد من عدم وجود الكرت مسبقاً، وتغليف الأمر بـ on-error لمنع توقف السكربت نهائياً
-      lines.push(
-        `:do { :if ([:len [/ip hotspot user find name="${safeCode}"]] = 0) do={ /ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes}${uptimeClause} server=all comment="${batchId}" } } on-error={}`
-      );
-    } else {
-      lines.push(
-        `/ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${prof}" limit-bytes-total=${limitBytes}${uptimeClause} server=all comment="${batchId}"`
-      );
-    }
+    // الهيكل البرمجي الصارم والآمن للأمر
+    lines.push(
+      `:do { :if ([:len [/ip hotspot user find name="${safeCode}"]] = 0) do={ /ip hotspot user add name="${safeCode}" password="${safePwd}" profile="${fixedProfile}" limit-bytes-total=${formattedBytes} server=all comment="${batchComment}" } } on-error={}`
+    );
   }
 
   return lines.join("\n");

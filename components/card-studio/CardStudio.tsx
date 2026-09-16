@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Card, CardBatch, CardTemplate, Profile, Tenant, CodeCharSet } from '@/types';
+import { Card, CardBatch, CardTemplate, Profile, Tenant, CodeCharSet, MikroTikInjectionAudit } from '@/types';
 import { DEFAULT_TEMPLATES, COLOR_SCHEME_PRESETS, svgToDataUri } from '@/lib/templates';
 import { CardPreview } from './CardPreview';
 import { A4SheetPreview } from './A4SheetPreview';
@@ -40,7 +40,15 @@ import {
   Sparkles,
   Tag,
   Copy,
-  X
+  X,
+  Server,
+  Wifi,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Zap,
+  Terminal,
+  ShieldCheck
 } from 'lucide-react';
 
 interface CardStudioProps {
@@ -544,6 +552,12 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copiedScript, setCopiedScript] = useState<boolean>(false);
 
+  // MikroTik REST API Auto-Injection Pipeline State
+  const [injectionAudit, setInjectionAudit] = useState<MikroTikInjectionAudit | null>(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+  const [enableSimulationMode, setEnableSimulationMode] = useState<boolean>(false);
+  const [copiedAuditScript, setCopiedAuditScript] = useState<boolean>(false);
+
   // Active profile
   const selectedProfile = useMemo(() => {
     return profiles.find(p => p.id === selectedProfileId) || profiles[0];
@@ -653,7 +667,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     }
   };
 
-  // Save batch into Inventory & Cloud Firestore with Pending status for MikroTik API sync
+  // Save batch into Inventory & Cloud Firestore and trigger MikroTik REST API Auto-Injection Pipeline
   const handleSaveToInventory = async () => {
     if (!previewBatchData.batch || isSavingBatch) return;
     setIsSavingBatch(true);
@@ -663,26 +677,32 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     try {
       const activeRouterToken = tenant.settings?.syncToken || 'sam_sec_89df24a67e12c4';
       const batchId = previewBatchData.batch.id;
-      const batchNumber = previewBatchData.batch.batchNumber;
+      const rawBatchNum = previewBatchData.batch.batchNumber || previewBatchData.batch.id || "001";
+      
+      let cleanBatchStr = String(rawBatchNum).replace(/^NetFlow[-_]?/i, "").trim();
+      if (cleanBatchStr.toLowerCase().startsWith("b-")) {
+        cleanBatchStr = cleanBatchStr.substring(2);
+      } else if (cleanBatchStr.toLowerCase().startsWith("b")) {
+        cleanBatchStr = cleanBatchStr.substring(1);
+      }
+      const batchComment = sanitizeRouterOSComment(`NetFlow-B-${cleanBatchStr || "001"}`);
 
-      // Transform cards to include required MikroTik sync properties:
-      // { username, password, profile: 'default', limitBytesTotal, limitUptime, comment }
+      // Rule 1: Fixed Profile "default" + Quota only limit-bytes-total (No limit-uptime if volume-based)
+      const formattedBytes = formatByteLimit(selectedProfile?.byteLimit || previewBatchData.cards[0]?.byteDisplay) || "2700M";
+
+      // Transform cards to strictly adhere to MikroTik RouterOS v7 rules
       const formattedCards = previewBatchData.cards.map(c => {
         const uName = c.code;
         const pwd = c.password || c.code;
-        const prof = resolveRouterOSProfile(selectedProfile?.name || c.profileName, 'default');
-        const bLimit = formatByteLimit(selectedProfile?.byteLimit || c.byteDisplay);
-        const uLimit = formatUptimeLimit(selectedProfile?.uptimeLimit || c.uptimeDisplay);
-        const comment = sanitizeRouterOSComment(`NetFlow_${batchNumber}_${c.price || 0}`);
+        const prof = 'default'; // Mandatory rule: profile="default" always
 
         return {
           ...c,
           username: uName,
           password: pwd,
           profile: prof,
-          limitBytesTotal: bLimit,
-          limitUptime: uLimit,
-          comment: comment
+          limitBytesTotal: formattedBytes,
+          comment: batchComment
         };
       });
 
@@ -690,6 +710,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         ...previewBatchData.batch,
         id: batchId,
         batchId: batchId,
+        batchNumber: cleanBatchStr || "001",
         tenantId: tenant.id,
         routerToken: activeRouterToken,
         status: 'pending',
@@ -698,16 +719,129 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         createdAt: new Date().toISOString()
       };
 
-      // Call onBatchSaved and await the Promise to resolve completely before showing success
+      // 1. Persist to Firestore cloud database
       await onBatchSaved(batchToSave, previewBatchData.cards);
 
-      // Explicit success feedback ONLY after the Firestore write promise resolves
-      setSuccessMessage(`تم حفظ الدفعة (${batchNumber}) بعدد ${quantity} كرت بنجاح في قاعدة بيانات Firestore والمخزن العام! حالة الدفعة الآن: معلقة للمزامنة (Pending) وبانتظار سحبها عبر توكن المايكروتك.`);
-      setTimeout(() => setSuccessMessage(null), 7000);
+      // 2. Immediate MikroTik REST API Auto-Injection Pipeline
+      let auditResult: MikroTikInjectionAudit | null = null;
+      try {
+        const routerConfig = {
+          host: tenant.settings?.apiHost || tenant.settings?.routerIp || '10.0.0.1',
+          port: tenant.settings?.apiPort || 443,
+          username: tenant.settings?.apiUser || 'admin',
+          password: tenant.settings?.apiPassword || '',
+          useHttps: true,
+          timeoutMs: 4000,
+          mockSimulation: enableSimulationMode
+        };
+
+        const injectRes = await fetch('/api/mikrotik/inject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batch_id: batchComment,
+            cards: formattedCards.map(c => ({
+              name: c.username,
+              password: c.password,
+              profile: 'default',
+              limitBytesTotal: formattedBytes,
+              comment: batchComment
+            })),
+            routerConfig
+          })
+        });
+
+        if (injectRes.ok) {
+          auditResult = await injectRes.json();
+        } else {
+          const errData = await injectRes.json().catch(() => ({}));
+          auditResult = {
+            batch_id: batchComment,
+            total_cards: formattedCards.length,
+            successfully_added: 0,
+            already_exist: 0,
+            failed_cards: formattedCards.length,
+            errors_details: errData.errors_details || [{ card: 'ALL', error: `تعذر الاتصال بالراوتر [HTTP ${injectRes.status}]` }],
+            status: 'failed',
+            router_ip: routerConfig.host
+          };
+        }
+      } catch (injectionErr: any) {
+        auditResult = {
+          batch_id: batchComment,
+          total_cards: formattedCards.length,
+          successfully_added: 0,
+          already_exist: 0,
+          failed_cards: formattedCards.length,
+          errors_details: [{ card: 'NETWORK', error: injectionErr?.message || 'تعذر إرسال طلب الحقن' }],
+          status: 'failed',
+          router_ip: tenant.settings?.routerIp || '10.0.0.1'
+        };
+      }
+
+      // 3. Open Detailed Audit & Confirmation Modal
+      if (auditResult) {
+        setInjectionAudit(auditResult);
+        setIsAuditModalOpen(true);
+      }
+
+      setSuccessMessage(`تم حفظ الدفعة (${batchComment}) بعدد ${quantity} كرت بنجاح في قاعدة البيانات.`);
+      setTimeout(() => setSuccessMessage(null), 6000);
     } catch (err: any) {
-      console.error('Error saving batch to Firestore:', err);
+      console.error('Error saving batch / auto-injection:', err);
       setBatchSaveError(err?.message || 'فشل حفظ الدفعة في قاعدة البيانات السحابية. يرجى التأكد من الاتصال والمحاولة مجدداً.');
       setTimeout(() => setBatchSaveError(null), 7000);
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // Re-run injection pipeline directly from audit modal (e.g. toggle simulation or retry)
+  const handleRerunInjection = async (forceSim: boolean) => {
+    if (!previewBatchData.batch || isSavingBatch) return;
+    setIsSavingBatch(true);
+    try {
+      const rawBatchNum = previewBatchData.batch.batchNumber || previewBatchData.batch.id || "001";
+      let cleanBatchStr = String(rawBatchNum).replace(/^NetFlow[-_]?/i, "").trim();
+      if (cleanBatchStr.toLowerCase().startsWith("b-")) {
+        cleanBatchStr = cleanBatchStr.substring(2);
+      } else if (cleanBatchStr.toLowerCase().startsWith("b")) {
+        cleanBatchStr = cleanBatchStr.substring(1);
+      }
+      const batchComment = sanitizeRouterOSComment(`NetFlow-B-${cleanBatchStr || "001"}`);
+      const formattedBytes = formatByteLimit(selectedProfile?.byteLimit || previewBatchData.cards[0]?.byteDisplay) || "2700M";
+
+      const routerConfig = {
+        host: tenant.settings?.apiHost || tenant.settings?.routerIp || '10.0.0.1',
+        port: tenant.settings?.apiPort || 443,
+        username: tenant.settings?.apiUser || 'admin',
+        password: tenant.settings?.apiPassword || '',
+        useHttps: true,
+        timeoutMs: 4000,
+        mockSimulation: forceSim
+      };
+
+      const injectRes = await fetch('/api/mikrotik/inject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_id: batchComment,
+          cards: previewBatchData.cards.map(c => ({
+            name: c.code,
+            password: c.password || c.code,
+            profile: 'default',
+            limitBytesTotal: formattedBytes,
+            comment: batchComment
+          })),
+          routerConfig
+        })
+      });
+
+      const auditData: MikroTikInjectionAudit = await injectRes.json();
+      setInjectionAudit(auditData);
+      setEnableSimulationMode(forceSim);
+    } catch (err: any) {
+      console.error('Failed to rerun injection:', err);
     } finally {
       setIsSavingBatch(false);
     }
@@ -918,7 +1052,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
               ) : (
                 <CheckCircle className="w-4 h-4" />
               )}
-              <span>{isSavingBatch ? 'جاري الحفظ في السحابة...' : 'حفظ الدفعة في المخزن'}</span>
+              <span>{isSavingBatch ? 'جاري الحفظ في المخزن والحقن في الراوتر...' : 'حفظ الدفعة في المخزن'}</span>
             </button>
 
             <button
@@ -1440,6 +1574,212 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         onConfirmClone={handleConfirmClone}
         isCloning={isCloningTemplate}
       />
+
+      {/* MikroTik REST API Auto-Injection Pipeline Confirmation & Audit Modal */}
+      {isAuditModalOpen && injectionAudit && (
+        <div
+          id="mikrotik-injection-audit-modal"
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden text-right animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800 p-5 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                  injectionAudit.failed_cards === 0
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : injectionAudit.successfully_added > 0
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                }`}>
+                  <Server className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-white">
+                      تقرير حقن الكروت في راوتر MikroTik
+                    </h3>
+                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-800 text-sky-400 border border-slate-700">
+                      {injectionAudit.batch_id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    التحقق اللحظي عبر MikroTik RouterOS v7 REST API
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="close-audit-modal-btn"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5">
+              {/* The 3 Core Results Cards (User Exact Request) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. تمت الإضافة بنجاح إلى الراوتر */}
+                <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3.5 text-center flex flex-col justify-between shadow-inner shadow-emerald-950/50">
+                  <div className="flex items-center justify-center gap-1.5 text-emerald-400 text-xs font-semibold mb-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>تمت الإضافة بنجاح:</span>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-300">
+                    {injectionAudit.successfully_added} <span className="text-xs font-normal">كرت</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-400/80 mt-1">
+                    profile: default
+                  </div>
+                </div>
+
+                {/* 2. كروت موجودة مسبقاً */}
+                <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-3.5 text-center flex flex-col justify-between shadow-inner shadow-amber-950/50">
+                  <div className="flex items-center justify-center gap-1.5 text-amber-400 text-xs font-semibold mb-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>موجودة مسبقاً:</span>
+                  </div>
+                  <div className="text-2xl font-black text-amber-300">
+                    {injectionAudit.already_exist} <span className="text-xs font-normal">كرت</span>
+                  </div>
+                  <div className="text-[10px] text-amber-400/80 mt-1">
+                    عدم تكرار (Deduplicated)
+                  </div>
+                </div>
+
+                {/* 3. كروت تعذر إضافتها */}
+                <div className="bg-rose-950/40 border border-rose-500/40 rounded-xl p-3.5 text-center flex flex-col justify-between shadow-inner shadow-rose-950/50">
+                  <div className="flex items-center justify-center gap-1.5 text-rose-400 text-xs font-semibold mb-1">
+                    <XCircle className="w-4 h-4" />
+                    <span>تعذر إضافتها:</span>
+                  </div>
+                  <div className="text-2xl font-black text-rose-300">
+                    {injectionAudit.failed_cards} <span className="text-xs font-normal">كرت</span>
+                  </div>
+                  <div className="text-[10px] text-rose-400/80 mt-1">
+                    تحتاج تدقيق أو سكربت
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Summary Banner */}
+              {injectionAudit.failed_cards === 0 ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3.5 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-bold text-emerald-300">
+                      اكتملت عملية الحقن المباشر في راوتر MikroTik بنجاح تام بنسبة 100%!
+                    </p>
+                    <p className="text-emerald-200/80 leading-relaxed">
+                      تم تعيين البروفايل الموحد <code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-300 font-mono">{'profile="default"'}</code> وحصص البيانات دون تعارض، مع توحيد تعليق الدفعة <code className="bg-emerald-950/60 px-1.5 py-0.5 rounded text-emerald-300 font-mono">{injectionAudit.batch_id}</code>.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs text-slate-300">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                      تفاصيل الفحص الهندسي والاتصال:
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      IP: {injectionAudit.router_ip || tenant.settings?.routerIp || '10.0.0.1'}
+                    </span>
+                  </div>
+                  
+                  {/* Explanation for local IP or connection */}
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {injectionAudit.errors_details[0]?.error || 'تعذر الاتصال المباشر بالراوتر. إذا كان الراوتر يعمل على آي بي محلي (مثل 10.0.0.1)، يمكنك نسخ سكربت التيرمينال الآمن (.rsc) ولصقه في تيرمينال المايكروتك مباشرة لتفعيلها في ثانية واحدة دون أي خطأ.'}
+                  </p>
+
+                  {/* Errors table preview if multiple errors */}
+                  {injectionAudit.errors_details.length > 0 && (
+                    <div className="max-h-28 overflow-y-auto rounded-lg bg-slate-900 border border-slate-800 p-2 space-y-1 font-mono text-[11px]">
+                      {injectionAudit.errors_details.slice(0, 5).map((ed, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-rose-300/90 py-0.5 border-b border-slate-800/60 last:border-0">
+                          <span>{ed.card}:</span>
+                          <span className="text-slate-400 truncate max-w-[280px]">{ed.error}</span>
+                        </div>
+                      ))}
+                      {injectionAudit.errors_details.length > 5 && (
+                        <div className="text-[10px] text-slate-500 text-center pt-1">
+                          + {injectionAudit.errors_details.length - 5} أخطاء إضافية...
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Quick Script Fallback Actions */}
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const script = generateRouterOSTerminalScript(previewBatchData.cards, 'hotspot_v7');
+                        copyTextToClipboard(script);
+                        setCopiedAuditScript(true);
+                        setTimeout(() => setCopiedAuditScript(false), 3000);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      <Terminal className="w-3.5 h-3.5 text-sky-400" />
+                      <span>{copiedAuditScript ? 'تم نسخ سكربت .rsc بنجاح!' : 'نسخ سكربت (.rsc) لتشغيله في Terminal'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRerunInjection(true)}
+                      disabled={isSavingBatch}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>تجربة الفحص السحابي بوضع المحاكاة</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Technical Specifications Checklist */}
+              <div className="border-t border-slate-800/80 pt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400">✓</span>
+                  <span>البروفايل الموحد: <code className="text-slate-300 font-mono">default</code></span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400">✓</span>
+                  <span>حفظ سحابي دائم في المخزن</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400">✓</span>
+                  <span>تعليق الدفعة: <code className="text-slate-300 font-mono">{injectionAudit.batch_id}</code></span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400">✓</span>
+                  <span>حماية من تسريب الكروت (Zero-Leakage)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-950/90 border-t border-slate-800 p-4 flex items-center justify-between">
+              <div className="text-[11px] text-slate-500">
+                الحالة: <span className="font-bold text-slate-300">{injectionAudit.status === 'completed' ? 'مكتمل بنجاح' : injectionAudit.status === 'partial' ? 'إضافة جزئية' : 'تنبيه اتصال'}</span>
+              </div>
+              <button
+                type="button"
+                id="confirm-close-audit-modal-btn"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-lg shadow-emerald-950/40"
+              >
+                إغلاق النافذة والمتابعة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

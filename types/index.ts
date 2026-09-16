@@ -532,3 +532,33 @@ export interface PlatformSettings {
   updatedAt: string;
 }
 
+// ==========================================================
+// MikroTik REST API Auto-Injection Pipeline Models
+// ==========================================================
+export interface CardInjectionItem {
+  name: string;
+  password?: string;
+  profile?: string;
+  limitBytesTotal?: string | number;
+  comment?: string;
+}
+
+export interface InjectionErrorDetail {
+  card: string;
+  error: string;
+  code?: string | number;
+}
+
+export interface MikroTikInjectionAudit {
+  batch_id: string;
+  total_cards: number;
+  successfully_added: number;
+  already_exist: number;
+  failed_cards: number;
+  errors_details: InjectionErrorDetail[];
+  status: 'completed' | 'partial' | 'failed';
+  connection_type?: string;
+  router_ip?: string;
+  timestamp?: string;
+}
+
