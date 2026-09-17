@@ -37,32 +37,33 @@ export async function POST(req: NextRequest) {
     })).filter(c => c.name.length > 0);
 
     // Environment variables fallback for MikroTik REST API
-    // Connection & Port Target:
-    // process.env.MIKROTIK_HOST (Router domain or IP)
-    // process.env.MIKROTIK_USER (Authorized user: mosthassan)
-    // process.env.MIKROTIK_PASS (API encrypted password)
-    // Dedicated port: 8081 (to avoid conflict with internal hotspot port 80)
-    // Target: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+    // Target Endpoint: https://router.samtecai.com:443/rest/ip/hotspot/user
     const envHost = process.env.MIKROTIK_HOST?.trim();
     const envUser = process.env.MIKROTIK_USER?.trim() || 'mosthassan';
     const envPass = process.env.MIKROTIK_PASS || '';
-    const envPort = 8081;
+    const envPort = process.env.MIKROTIK_PORT ? Number(process.env.MIKROTIK_PORT) : 443;
+    const envHttps = process.env.MIKROTIK_HTTPS === 'false' ? false : true;
 
-    // Resolve effective host and credentials with robust fallbacks
-    const effectiveHost = routerConfig?.host?.trim() || routerConfig?.routerIp?.trim() || envHost || '192.168.88.1';
+    // Resolve effective host and credentials with robust fallbacks:
+    // Default host: router.samtecai.com
+    // Default port: 443
+    // Default protocol: https://
+    const effectiveHost = routerConfig?.host?.trim() || routerConfig?.routerIp?.trim() || envHost || 'router.samtecai.com';
+    const effectivePort = routerConfig?.port ? Number(routerConfig.port) : envPort;
     const effectiveUser = routerConfig?.username?.trim() || routerConfig?.apiUser?.trim() || envUser;
     const effectivePass = (routerConfig?.password !== undefined && routerConfig.password !== '') 
       ? routerConfig.password 
       : envPass;
+    const effectiveHttps = routerConfig?.useHttps !== undefined ? Boolean(routerConfig.useHttps) : envHttps;
 
     // Prepare router configuration with safe defaults
     const effectiveConfig: RouterConfig = {
       host: effectiveHost,
-      port: envPort,
+      port: effectivePort,
       username: effectiveUser,
       password: effectivePass,
-      useHttps: false, // Strictly HTTP on dedicated port 8081
-      timeoutMs: routerConfig?.timeoutMs ? Number(routerConfig.timeoutMs) : 5000,
+      useHttps: effectiveHttps, // Fixed HTTPS protocol by default
+      timeoutMs: routerConfig?.timeoutMs ? Number(routerConfig.timeoutMs) : 8000,
       mockSimulation: Boolean(routerConfig?.mockSimulation)
     };
 
@@ -94,24 +95,27 @@ export async function POST(req: NextRequest) {
 
 /**
  * Diagnostic GET endpoint to verify connection settings and target route
- * http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+ * https://router.samtecai.com:443/rest/ip/hotspot/user
  */
 export async function GET() {
-  const host = process.env.MIKROTIK_HOST || '192.168.88.1';
-  const port = 8081;
-  const user = process.env.MIKROTIK_USER || 'mosthassan';
+  const host = process.env.MIKROTIK_HOST?.trim() || 'router.samtecai.com';
+  const port = process.env.MIKROTIK_PORT ? Number(process.env.MIKROTIK_PORT) : 443;
+  const user = process.env.MIKROTIK_USER?.trim() || 'mosthassan';
   const hasPass = Boolean(process.env.MIKROTIK_PASS);
-  const targetUrl = `http://${host}:${port}/rest/ip/hotspot/user`;
+  const useHttps = process.env.MIKROTIK_HTTPS === 'false' ? false : true;
+  const protocol = useHttps ? 'https' : 'http';
+  const targetUrl = `${protocol}://${host}:${port}/rest/ip/hotspot/user`;
 
   return NextResponse.json({
     status: 'ready',
     target_endpoint: targetUrl,
     method: 'PUT /rest/ip/hotspot/user',
     dedicated_port: port,
+    protocol: `${protocol}://`,
     default_user: user,
     host_configured: Boolean(process.env.MIKROTIK_HOST),
     pass_configured: hasPass,
     router_host: host,
-    info: 'جميع طلبات الـ REST API تتم حصراً عبر المنفذ المخصص (8081) لتفادي تعارض منفذ الهوتسبوت الداخلي 80'
+    info: 'جميع طلبات الـ REST API موجهة بشكل ثابت عبر بروتوكول https:// والمنفذ الافتراضي 443 والنطاق router.samtecai.com في حال لم تتوفر متغيرات البيئة.'
   });
 }

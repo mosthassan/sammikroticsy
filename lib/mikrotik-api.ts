@@ -33,7 +33,7 @@ export function isPrivateIp(ip: string): boolean {
 
 /**
  * Executes a REST request to MikroTik RouterOS v7 using standard built-in fetch
- * Strictly targeting port 8081: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+ * Strictly targeting https://<ROUTER_HOST>:443/rest/ip/hotspot/user
  */
 async function sendMikroTikFetchRequest(
   method: 'PUT' | 'POST' | 'GET',
@@ -46,7 +46,7 @@ async function sendMikroTikFetchRequest(
     ? config.password
     : (process.env.MIKROTIK_PASS ?? '');
   const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
-  const timeoutMs = config.timeoutMs || 5000;
+  const timeoutMs = config.timeoutMs || 8000;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -76,8 +76,8 @@ async function sendMikroTikFetchRequest(
 /**
  * Injects a single card into MikroTik RouterOS v7 REST API
  * Strictly enforces:
- * - Target: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
- * - Dedicated port 8081 to avoid Hotspot port 80 conflict
+ * - Target: https://router.samtecai.com:443/rest/ip/hotspot/user (or configured host/port)
+ * - Default HTTPS protocol and Port 443
  * - profile: "default"
  * - clean payload with quota-only limit-bytes-total
  */
@@ -118,14 +118,20 @@ export async function injectSingleCard(
   }
 
   // Connection & Port Target resolution:
-  // Strictly port 8081: http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+  // Fallback host: router.samtecai.com
+  // Default port: 443
+  // Fixed protocol: https://
   const envHost = process.env.MIKROTIK_HOST?.trim();
-  const host = config.host?.trim() || envHost || '192.168.88.1';
-  const port = 8081;
-  const targetEndpoint = `http://${host}:${port}/rest/ip/hotspot/user`;
+  const host = config.host?.trim() || envHost || 'router.samtecai.com';
+  const port = config.port || (process.env.MIKROTIK_PORT ? Number(process.env.MIKROTIK_PORT) : 443);
+  const useHttps = config.useHttps !== undefined 
+    ? config.useHttps 
+    : (process.env.MIKROTIK_HTTPS === 'false' ? false : true);
+  const protocol = useHttps ? 'https' : 'http';
+  const targetEndpoint = `${protocol}://${host}:${port}/rest/ip/hotspot/user`;
 
   try {
-    // Preferred RouterOS v7 method: PUT http://<ROUTER_HOST>:8081/rest/ip/hotspot/user
+    // Preferred RouterOS v7 method: PUT https://<ROUTER_HOST>:443/rest/ip/hotspot/user
     let response = await sendMikroTikFetchRequest('PUT', targetEndpoint, payload, config);
 
     // If 404 or method not allowed on some RouterOS minor builds, fallback to POST
@@ -183,7 +189,7 @@ export async function injectSingleCard(
     if (isTimeout) {
       errorDetail = `انتهت مهلة الاتصال بالراوتر (${targetEndpoint})`;
     } else if (isConnRefused) {
-      errorDetail = `تم رفض الاتصال من الراوتر (${targetEndpoint}) - تأكد من تشغيل خدمة www على المنفذ 8081 في /ip service`;
+      errorDetail = `تم رفض الاتصال من الراوتر (${targetEndpoint}) - تأكد من فتح المنفذ 443 وتفعيل شهادة SSL أو إتاحة خدمة www-ssl`;
     }
 
     return {
@@ -260,8 +266,11 @@ export async function executeAutoInjectionPipeline(
     finalStatus = successfullyAdded > 0 ? 'partial' : 'failed';
   }
 
-  const effectiveHost = routerConfig.host?.trim() || process.env.MIKROTIK_HOST?.trim() || '192.168.88.1';
-  const targetUrl = `http://${effectiveHost}:8081/rest/ip/hotspot/user`;
+  const effectiveHost = routerConfig.host?.trim() || process.env.MIKROTIK_HOST?.trim() || 'router.samtecai.com';
+  const effectivePort = routerConfig.port || (process.env.MIKROTIK_PORT ? Number(process.env.MIKROTIK_PORT) : 443);
+  const effectiveHttps = routerConfig.useHttps !== undefined ? routerConfig.useHttps : (process.env.MIKROTIK_HTTPS === 'false' ? false : true);
+  const effectiveProtocol = effectiveHttps ? 'https' : 'http';
+  const targetUrl = `${effectiveProtocol}://${effectiveHost}:${effectivePort}/rest/ip/hotspot/user`;
 
   return {
     batch_id: batchComment,

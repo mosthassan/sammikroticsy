@@ -31,6 +31,7 @@ import {
   FileSpreadsheet,
   Trash2,
   Sparkles,
+  Broom,
   ShieldAlert,
   Clock,
   HardDrive,
@@ -80,8 +81,8 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
   // Connection settings state
   const [routerIp, setRouterIp] = useState<string>(tenant.settings.routerIp || '10.0.0.1');
   const [loginDomain, setLoginDomain] = useState<string>(tenant.settings.loginDomain || 'wifi.net');
-  const [apiHost, setApiHost] = useState<string>(tenant.settings.apiHost || '192.168.88.1');
-  const [apiPort, setApiPort] = useState<number>(tenant.settings.apiPort || 8081);
+  const [apiHost, setApiHost] = useState<string>(tenant.settings.apiHost || 'router.samtecai.com');
+  const [apiPort, setApiPort] = useState<number>(tenant.settings.apiPort || 443);
   const [apiUser, setApiUser] = useState<string>(tenant.settings.apiUser || 'mosthassan');
   const [apiPassword, setApiPassword] = useState<string>(tenant.settings.apiPassword || '');
   const [hotspotServerName, setHotspotServerName] = useState<string>(tenant.settings.hotspotServerName || 'hotspot1');
@@ -939,39 +940,39 @@ export const MikroTikBridge: React.FC<MikroTikBridgeProps> = ({
           <div className="border-b border-slate-800 pb-3">
             <h2 className="font-bold text-white text-base flex items-center gap-2">
               <Server className="w-5 h-5 text-purple-400" />
-              إعدادات الاتصال المباشر عبر RouterOS API (Port 8728 / 443)
+              إعدادات الاتصال المباشر عبر RouterOS REST API (Port 443 HTTPS)
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              لتمكين المزامنة الحية وفحص حالة المستخدمين النشطين (Active Sessions).
+              لتمكين المزامنة الحية وحقن الكروت وفحص حالة المستخدمين النشطين (Active Sessions).
             </p>
           </div>
 
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-slate-300 font-bold mb-1">عنوان الراوتر (Host/IP)</label>
+                <label className="block text-slate-300 font-bold mb-1">عنوان الراوتر (Host/Domain)</label>
                 <input
                   type="text"
                   value={apiHost}
                   onChange={e => setApiHost(e.target.value)}
-                  placeholder="192.168.88.1"
+                  placeholder="router.samtecai.com"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-bold mb-1">
-                  منفذ الـ REST API (الافتراضي: 8081)
+                  منفذ الـ REST API (الافتراضي: 443 HTTPS)
                 </label>
                 <input
                   type="number"
                   value={apiPort}
-                  onChange={e => setApiPort(parseInt(e.target.value) || 8081)}
-                  placeholder="8081"
+                  onChange={e => setApiPort(parseInt(e.target.value) || 443)}
+                  placeholder="443"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-mono focus:outline-none"
                 />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  لتفادي تعارض منفذ الهوتسبوت 80
+                <span className="text-[10px] text-emerald-400 mt-1 block">
+                  اتصال مشفر وآمن عبر https://
                 </span>
               </div>
 
