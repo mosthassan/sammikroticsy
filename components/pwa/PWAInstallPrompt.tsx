@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Smartphone,
@@ -118,14 +119,13 @@ export function PWAInstallPrompt() {
                 {/* Header with App Icon */}
                 <div className="flex items-center gap-3.5 pr-1">
                   <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 border border-sky-500/40 p-1.5 shadow-lg shadow-sky-900/40 flex items-center justify-center shrink-0">
-                    <img
+                    <Image
                       src="/pwa-192x192.png"
                       alt="سام تك"
+                      width={56}
+                      height={56}
                       className="w-full h-full object-contain rounded-xl"
-                      onError={(e) => {
-                        // Fallback if image failed
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
+                      referrerPolicy="no-referrer"
                     />
                     <div className="absolute -bottom-1 -right-1 p-1 bg-emerald-500 rounded-full border-2 border-slate-900 shadow">
                       <Wifi className="w-3 h-3 text-slate-950" />
