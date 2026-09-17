@@ -947,18 +947,19 @@ service cloud.firestore {
         <div className="space-y-6">
           <SubscriptionPlansCard
             tenant={tenant}
-            onSelectPlan={(plan, billing) => {
-              const planNames = {
+            onSelectPlan={(planInput, billing) => {
+              const plan = (planInput as 'starter' | 'pro' | 'enterprise') || 'starter';
+              const planNames: Record<'starter' | 'pro' | 'enterprise', string> = {
                 starter: 'الخطة المجانية',
                 pro: 'الخطة الاحترافية',
                 enterprise: 'خطة الشركات والمؤسسات'
               };
-              const maxCardsMap = {
+              const maxCardsMap: Record<'starter' | 'pro' | 'enterprise', number> = {
                 starter: 300,
                 pro: 999999,
                 enterprise: 9999999
               };
-              const maxDistributorsMap = {
+              const maxDistributorsMap: Record<'starter' | 'pro' | 'enterprise', number> = {
                 starter: 1,
                 pro: 15,
                 enterprise: 9999

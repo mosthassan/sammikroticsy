@@ -91,6 +91,9 @@ export interface Card {
   distributedAt?: string;
   usedAt?: string;
   syncedToRouter: boolean;
+  username?: string;
+  byteLimit?: string;
+  uptimeLimit?: string;
 }
 
 export type CodeCharSet = 
@@ -104,7 +107,7 @@ export interface CardBatchItem {
   password?: string;
   profile: string;
   limitBytesTotal: string;
-  limitUptime: string;
+  limitUptime?: string;
   comment: string;
   [key: string]: any;
 }
@@ -277,6 +280,9 @@ export interface CardTemplate {
   linkedProfileName?: string;
   createdAt?: string;
   updatedAt?: string;
+  patternStyle?: string;
+  elements?: any[];
+  qrType?: 'login_url' | 'code_only' | 'pin_code' | 'raw_text';
   // Element-Level Styling & Layout Shape Customization
   elementScale?: number; // Custom scale multiplier (default 1.0)
   codeBoxStyle?: 'modern_box' | 'pill_badge' | 'ticket_dashed' | 'neon_glow' | 'minimal_clean' | 'split_pin';

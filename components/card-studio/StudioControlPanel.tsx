@@ -27,6 +27,7 @@ import {
   Type,
   KeyRound,
   Lock,
+  ShieldCheck,
   QrCode,
   Lightbulb,
   UploadCloud,
@@ -1005,6 +1006,10 @@ export const StudioControlPanel: React.FC<StudioControlPanelProps> = ({
                 onChange={e => setCodeLength(Math.max(3, Math.min(20, parseInt(e.target.value) || 6)))}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-sky-500"
               />
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1 mt-1 font-medium">
+                <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>توليد مشفر غير قابل للتخمين (Anti-Guessing CSPRNG)</span>
+              </span>
             </div>
           </div>
 

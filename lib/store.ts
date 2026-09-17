@@ -392,11 +392,97 @@ const INITIAL_AGENTS: Agent[] = [
 
 import { CodeCharSet } from '@/types';
 
+/**
+ * توليد رقم عشوائي مشفر وآمن (CSPRNG) غير قابل للتخمين
+ * يعتمد على globalThis.crypto.getRandomValues بدلاً من Math.random
+ */
+function getSecureRandomInt(max: number): number {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) {
+    const buffer = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(buffer);
+    return buffer[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+/**
+ * فحص الأنماط السهلة والتخمينية (Anti-Guessing Pattern Filter)
+ * يستبعد الأنماط التافهة أو المتتابعة:
+ * 1. الأرقام المتطابقة كلياً (مثل 111111 أو 777777)
+ * 2. تكرار أكثر من رقمين متتاليين متطابقين (مثل 111 أو 999)
+ * 3. الأرقام المتسلسلة تصاعدياً أو تنازلياً (مثل 123456 أو 987654 أو 345 أو 654)
+ * 4. التكرار الثنائي الدوري (مثل 121212 أو 505050)
+ * 5. التكرار الثلاثي الدوري (مثل 123123 أو 456456)
+ * 6. ضعف التنوع الرقمي (Low Entropy)
+ */
+function isPredictableCode(codeStr: string, isDigitsOnly: boolean): boolean {
+  if (!codeStr || codeStr.length < 3) return false;
+
+  // 1. جميع الخانات متطابقة تماماً
+  const firstChar = codeStr[0];
+  if (codeStr.split('').every(ch => ch === firstChar)) {
+    return true;
+  }
+
+  // 2. يحتوي على 3 خانات متطابقة متتالية (مثل 111 أو 999)
+  if (/(.)\1\1/.test(codeStr)) {
+    return true;
+  }
+
+  // 3. فحص التسلسلات والأنماط للأرقام
+  if (isDigitsOnly) {
+    // استبعاد أي 3 أرقام متسلسلة تصاعدياً أو تنازلياً (مثل 123 أو 321)
+    for (let i = 0; i < codeStr.length - 2; i++) {
+      const d1 = codeStr.charCodeAt(i);
+      const d2 = codeStr.charCodeAt(i + 1);
+      const d3 = codeStr.charCodeAt(i + 2);
+      if ((d2 === d1 + 1 && d3 === d2 + 1) || (d2 === d1 - 1 && d3 === d2 - 1)) {
+        return true;
+      }
+    }
+
+    // استبعاد النمط الثنائي المكرر (مثل 121212 أو 505050)
+    if (codeStr.length >= 4) {
+      const p2 = codeStr.slice(0, 2);
+      if (codeStr.slice(2, 4) === p2 && (codeStr.length < 6 || codeStr.slice(4, 6) === p2)) {
+        return true;
+      }
+    }
+
+    // استبعاد النمط الثلاثي المكرر (مثل 123123 أو 456456)
+    if (codeStr.length >= 6) {
+      const p3 = codeStr.slice(0, 3);
+      if (codeStr.slice(3, 6) === p3) {
+        return true;
+      }
+    }
+
+    // استبعاد الأرقام ذات التنوع الضعيف (أقل من 4 أرقام مميزة لكود من 6 خانات)
+    const uniqueChars = new Set(codeStr.split('')).size;
+    const minUnique = codeStr.length >= 6 ? 4 : Math.min(3, codeStr.length);
+    if (uniqueChars < minUnique) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * دالة توليد أكواد الكروت غير القابلة للتخمين
+ * - توليد عشوائي مشفر CSPRNG
+ * - استبعاد الصفر في بداية الرقم لمنع مشاكل الحذف في الجداول وقواعد البيانات
+ * - تصفية صارمة ضد الأرقام المتتابعة أو السهلة
+ * - استبعاد الحروف الملتبسة في النمط الأبجدي (مثل 0 و O و 1 و I)
+ */
 export function generateVoucherCode(
   length: number = 6, 
   prefix: string = '', 
   charSet: CodeCharSet = 'digits_only'
 ): string {
+  const effectiveLength = Math.max(3, Math.min(20, length));
+  const isDigits = charSet === 'digits_only';
+
   let chars = '0123456789';
   if (charSet === 'alphanumeric_upper') {
     chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -405,20 +491,51 @@ export function generateVoucherCode(
   } else if (charSet === 'alphanumeric_mixed') {
     chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   }
-  
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return prefix ? `${prefix}${result}` : result;
+
+  let candidate = '';
+  let attempts = 0;
+
+  do {
+    attempts++;
+    candidate = '';
+
+    for (let i = 0; i < effectiveLength; i++) {
+      // في حالة الأرقام الصافية، نضمن عدم بدء الرقم بصفر لثبات خانات الكرت
+      if (isDigits && i === 0) {
+        const nonZeroDigits = '123456789';
+        candidate += nonZeroDigits.charAt(getSecureRandomInt(nonZeroDigits.length));
+      } else {
+        candidate += chars.charAt(getSecureRandomInt(chars.length));
+      }
+    }
+  } while (attempts < 100 && isPredictableCode(candidate, isDigits));
+
+  return prefix ? `${prefix}${candidate}` : candidate;
 }
 
+/**
+ * دالة توليد رمز PIN قوي وغير قابل للتخمين
+ * تستبعد الرموز البديهية مثل 0000 أو 1234 أو 2580
+ */
 export function generatePinCode(length: number = 4): string {
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += Math.floor(Math.random() * 10).toString();
-  }
-  return result;
+  const effectiveLength = Math.max(3, Math.min(10, length));
+  const obviousPins = new Set([
+    '1234', '4321', '0000', '1111', '2222', '3333', '4444', 
+    '5555', '6666', '7777', '8888', '9999', '2580', '0852', '1212', '6969'
+  ]);
+
+  let pin = '';
+  let attempts = 0;
+
+  do {
+    attempts++;
+    pin = '';
+    for (let i = 0; i < effectiveLength; i++) {
+      pin += getSecureRandomInt(10).toString();
+    }
+  } while (attempts < 50 && (obviousPins.has(pin) || isPredictableCode(pin, true)));
+
+  return pin;
 }
 
 export function createInitialData(): AppState {
@@ -952,9 +1069,19 @@ export function generateBatchCards(
   const now = new Date().toISOString();
 
   const generatedCards: Card[] = [];
+  const uniqueCodesInBatch = new Set<string>();
 
   for (let i = 1; i <= params.quantity; i++) {
-    const code = generateVoucherCode(params.codeLength, params.prefix, params.codeCharSet || 'digits_only');
+    // توليد كود قوي غير قابل للتخمين وضمان عدم تكراره نهائياً في الدفعة
+    let code = '';
+    let attempts = 0;
+    do {
+      attempts++;
+      code = generateVoucherCode(params.codeLength, params.prefix, params.codeCharSet || 'digits_only');
+    } while (uniqueCodesInBatch.has(code) && attempts < 200);
+
+    uniqueCodesInBatch.add(code);
+
     let password = code;
     if (params.passwordType === 'separate_pin') {
       password = generatePinCode(4);

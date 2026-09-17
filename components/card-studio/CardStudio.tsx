@@ -579,6 +579,25 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   }, [tenant, selectedProfile, quantity, prefix, codeLength, codeCharSet, passwordType, currentTemplate.id]);
 
   const activeCards = previewBatchData.cards;
+  const sampleCard: Card = activeCards[0] || {
+    id: 'sample_01',
+    tenantId: tenant.id,
+    batchId: 'batch_sample',
+    batchNumber: 'B-SAMPLE',
+    code: '784921',
+    password: 'PIN-1024',
+    profileId: selectedProfile?.id || 'prof_1',
+    profileName: selectedProfile?.name || '1 جيجا - 24 ساعة',
+    rateLimit: selectedProfile?.rateLimit || '5M/2M',
+    uptimeDisplay: selectedProfile?.uptimeDisplay || '24 ساعة',
+    byteDisplay: selectedProfile?.byteDisplay || '1 جيجابايت',
+    price: selectedProfile?.price || 500,
+    wholesalePrice: selectedProfile?.wholesalePrice || 450,
+    status: 'in_stock',
+    qrData: 'http://10.0.0.1/login?username=784921',
+    createdAt: new Date().toISOString(),
+    syncedToRouter: false
+  };
 
   // Custom template updates
   const handleUpdateTemplate = (updates: Partial<CardTemplate>) => {
@@ -702,6 +721,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
           password: pwd,
           profile: prof,
           limitBytesTotal: formattedBytes,
+          limitUptime: selectedProfile?.uptimeLimit || '',
           comment: batchComment
         };
       });

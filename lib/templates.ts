@@ -925,6 +925,7 @@ export interface ColorSchemePreset {
   codeBoxBorderColor: string;
   codeBoxTextColor: string;
   borderColor: string;
+  patternStyle?: string;
 }
 
 export const COLOR_SCHEME_PRESETS: ColorSchemePreset[] = [

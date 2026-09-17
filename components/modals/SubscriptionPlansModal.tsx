@@ -59,7 +59,7 @@ export const SubscriptionPlansModal: React.FC<SubscriptionPlansModalProps> = ({
             tenant={tenant}
             onSelectPlan={(plan, billing) => {
               if (onSelectPlan) {
-                onSelectPlan(plan, billing);
+                onSelectPlan(plan as 'starter' | 'pro' | 'enterprise', billing);
               }
               onClose();
             }}

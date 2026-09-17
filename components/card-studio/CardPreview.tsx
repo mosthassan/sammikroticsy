@@ -348,9 +348,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({
                       key={idx}
                       style={{
                         fontSize: `${Math.round((p.fontSize || 13) * 0.9 * autoScale)}px`,
-                        backgroundColor: template.codeBoxBg || (isDarkCard ? '#090e1f' : '#f8fafc'),
-                        borderColor: template.codeBoxBorderColor || (isDarkCard ? '#38bdf8' : '#0284c7'),
-                        color: template.codeBoxTextColor || (isDarkCard ? '#ffffff' : '#020617')
+                        backgroundColor: template.codeBoxBg || (isDark ? '#090e1f' : '#f8fafc'),
+                        borderColor: template.codeBoxBorderColor || (isDark ? '#38bdf8' : '#0284c7'),
+                        color: template.codeBoxTextColor || (isDark ? '#ffffff' : '#020617')
                       }}
                       className="w-4 h-5 rounded border font-mono font-black flex items-center justify-center shadow-inner"
                     >

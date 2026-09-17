@@ -19,6 +19,8 @@ export interface CardGridPreset {
   marginX: number;
   marginY: number;
   recommendedQrMm: number;
+  elementScale?: number;
+  cardsPerPage?: number;
 }
 
 export const CARD_GRID_PRESETS: CardGridPreset[] = [

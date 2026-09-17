@@ -75,6 +75,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     batch: CardBatch;
     cards: Card[];
     count: number;
+    script?: string;
   } | null>(null);
   const [scriptViewMode, setScriptViewMode] = useState<'rsc_file' | 'terminal_chunks'>('rsc_file');
   const [activeChunkIndex, setActiveChunkIndex] = useState<number>(0);
@@ -285,6 +286,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       } else {
         setScriptModalData({
           batch,
+          cards: batchCards,
           script,
           count: batchCards.length
         });
@@ -300,6 +302,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       const script = generateRouterOSTerminalScript(batchCards, batch.profileName);
       setScriptModalData({
         batch,
+        cards: batchCards,
         script,
         count: batchCards.length
       });
@@ -903,7 +906,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
       {scriptModalData && (() => {
         const rawBatchCards = scriptModalData.cards || [];
         const activeCards = excludeExpiredToggle
-          ? rawBatchCards.filter(c => c && c.status !== 'used' && c.status !== 'expired' && c.status !== 'archived')
+          ? rawBatchCards.filter(c => c && c.status !== 'used' && c.status !== 'expired')
           : rawBatchCards;
         const expiredCount = rawBatchCards.length - activeCards.length;
         const chunks = chunkCards(activeCards, 50);

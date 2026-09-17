@@ -31,7 +31,6 @@ import {
   FileSpreadsheet,
   Trash2,
   Sparkles,
-  Broom,
   ShieldAlert,
   Clock,
   HardDrive,
